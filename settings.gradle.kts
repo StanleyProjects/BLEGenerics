@@ -1,3 +1,3 @@
 rootProject.name = "BLEGenerics"
 
-include("app")
+include("lib", "sample")
