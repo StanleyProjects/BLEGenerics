@@ -1,3 +1,6 @@
+import sp.gx.core.buildDir
+import sp.gx.core.buildSrc
+
 buildscript {
     repositories {
         google()
@@ -11,5 +14,5 @@ buildscript {
 }
 
 task<Delete>("clean") {
-    delete = setOf(file("build"), file("buildSrc/build"))
+    delete = setOf(buildDir(), buildSrc.buildDir())
 }

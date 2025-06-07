@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import sp.gx.core.getByName
 
 repositories {
     google()
@@ -10,7 +11,7 @@ repositories {
 plugins {
     id("com.android.application")
     id("kotlin-android")
-    id("org.jetbrains.compose") version Version.compose
+    id("org.jetbrains.compose") version "1.7.3"
 }
 
 android {
@@ -52,16 +53,17 @@ androidComponents.onVariants { variant ->
         android.defaultConfig.versionCode!!.toString(),
     ).joinToString(separator = "-", postfix = ".apk")
     afterEvaluate {
-        tasks.getByName<JavaCompile>("compile${variant.name.replaceFirstChar(Char::titlecase)}JavaWithJavac") {
+        tasks.getByName<JavaCompile>("compile", variant.name, "JavaWithJavac") {
             targetCompatibility = Version.jvmTarget
         }
-        tasks.getByName<KotlinCompile>("compile${variant.name.replaceFirstChar(Char::titlecase)}Kotlin") {
+        tasks.getByName<KotlinCompile>("compile", variant.name, "Kotlin") {
             kotlinOptions.jvmTarget = Version.jvmTarget
         }
     }
 }
 
 dependencies {
+    implementation(project(":lib"))
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation(compose.foundation)
     implementation("com.github.kepocnhh:BLEScanner:0.1.3u-SNAPSHOT")
