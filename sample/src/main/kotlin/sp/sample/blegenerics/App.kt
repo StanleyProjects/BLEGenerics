@@ -19,6 +19,9 @@ internal class App : Application() {
             context = this,
             timeout = 3.seconds,
         )
+        _generics = RealBLEGenerics(
+            context = this,
+        )
     }
 
     companion object {

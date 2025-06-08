@@ -25,5 +25,8 @@
         <service android:name=".ScannerService"
             android:exported="false"
             android:foregroundServiceType="location"/>
+        <service android:name=".DeviceService"
+            android:exported="false"
+            android:foregroundServiceType="location"/>
     </application>
 </manifest>
