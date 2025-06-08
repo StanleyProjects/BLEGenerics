@@ -47,6 +47,14 @@ internal class DeviceService : Service() {
         return broadcast
     }
 
+    private fun getBroadcast(address: String, event: BLEGenerics.Event): Intent {
+        val broadcast = Intent("events") // todo
+        broadcast.setPackage(packageName) // https://stackoverflow.com/a/76920719/4398606
+        broadcast.putExtra("address", address)
+        broadcast.putExtra("event", event.name)
+        return broadcast
+    }
+
     override fun onCreate() {
         super.onCreate()
         val channel = NotificationChannel(
@@ -61,6 +69,12 @@ internal class DeviceService : Service() {
         coroutineScope.launch {
             generics.states.collect { states ->
                 sendBroadcast(getBroadcast(states = states))
+                // todo notifications
+            }
+        }
+        coroutineScope.launch {
+            generics.events.collect { (address, event) ->
+                sendBroadcast(getBroadcast(address = address, event = event))
                 // todo notifications
             }
         }
@@ -121,6 +135,33 @@ internal class DeviceService : Service() {
                     }
                 }
                 val filters = IntentFilter("states") // todo
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    context.registerReceiver(
+                        receivers,
+                        filters,
+                        RECEIVER_NOT_EXPORTED,
+                    )
+                } else {
+                    context.registerReceiver(receivers, filters)
+                }
+                awaitClose {
+                    context.unregisterReceiver(receivers)
+                }
+            }
+        }
+
+        fun events(context: Context): Flow<Pair<String, BLEGenerics.Event>> {
+            return callbackFlow {
+                val receivers = object : BroadcastReceiver() {
+                    override fun onReceive(context: Context?, intent: Intent?) {
+                        val address = intent?.getStringExtra("address") ?: return
+                        val event = intent.getStringExtra("event")?.let { name ->
+                            BLEGenerics.Event.entries.firstOrNull { it.name == name }
+                        } ?: return
+                        trySend(address to event)
+                    }
+                }
+                val filters = IntentFilter("events") // todo
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     context.registerReceiver(
                         receivers,

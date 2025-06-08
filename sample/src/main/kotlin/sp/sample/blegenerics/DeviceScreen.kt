@@ -51,6 +51,18 @@ internal fun DeviceScreen(
         intent.action = "states"
         context.startService(intent)
     }
+    LaunchedEffect(Unit) {
+        DeviceService.events(context = context).collect { (address, event) ->
+            if (address == device.address) {
+                when (event) {
+                    BLEGenerics.Event.OnConnect -> {
+                        // todo
+                    }
+                    BLEGenerics.Event.OnDisconnect -> onDisconnect()
+                }
+            }
+        }
+    }
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -73,7 +85,6 @@ internal fun DeviceScreen(
                         intent.action = "disconnect"
                         intent.putExtra("address", device.address)
                         context.startService(intent)
-                        onDisconnect()
                     }
                     .wrapContentSize(),
                 text = "disconnect",

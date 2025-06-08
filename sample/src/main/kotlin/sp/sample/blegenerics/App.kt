@@ -20,6 +20,8 @@ internal class App : Application() {
             timeout = 3.seconds,
         )
         _generics = RealBLEGenerics(
+            coroutineScope = CoroutineScope(Dispatchers.Main + job),
+            default = Dispatchers.Default,
             context = this,
         )
     }
