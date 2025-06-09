@@ -39,6 +39,7 @@ internal class DeviceService : Service() {
                 is BLEGenerics.State.Connected -> "Connected"
                 BLEGenerics.State.Connecting -> "Connecting"
                 BLEGenerics.State.Disconnecting -> "Disconnecting"
+                BLEGenerics.State.Searching -> "Searching"
             }
         }
         broadcast.putExtra("names", names.toTypedArray())
@@ -71,7 +72,7 @@ internal class DeviceService : Service() {
             val (address, state) = states.entries.firstOrNull() ?: TODO()
             builder.setContentText("$address: $state")
             when (state) {
-                is BLEGenerics.State.Connected -> {
+                is BLEGenerics.State.Connected, is BLEGenerics.State.Searching -> {
                     val intent = Intent(context, DeviceService::class.java)
                     intent.action = "disconnect"
                     intent.putExtra("address", address)
@@ -174,6 +175,7 @@ internal class DeviceService : Service() {
                                 }
                                 "Connecting" -> BLEGenerics.State.Connecting
                                 "Disconnecting" -> BLEGenerics.State.Disconnecting
+                                "Searching" -> BLEGenerics.State.Searching
                                 else -> continue
                             }
                             states[address] = state

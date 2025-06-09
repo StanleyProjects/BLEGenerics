@@ -47,9 +47,11 @@ internal fun DeviceScreen(
         }
     }
     LaunchedEffect(Unit) {
-        val intent = Intent(context, DeviceService::class.java)
-        intent.action = "states"
-        context.startService(intent)
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            val intent = Intent(context, DeviceService::class.java)
+            intent.action = "states"
+            context.startService(intent)
+        }
     }
     LaunchedEffect(Unit) {
         DeviceService.events(context = context).collect { (address, event) ->
@@ -73,6 +75,11 @@ internal fun DeviceScreen(
                 name: ${device.name}
                 address: ${device.address}
             """.trimIndent()
+            val enabled = when (state) {
+                is BLEGenerics.State.Connected -> true
+                BLEGenerics.State.Searching -> true
+                else -> false
+            }
             BasicText(text = text)
             BasicText(text = "state: $state")
             Spacer(Modifier.weight(1f)) // todo
@@ -80,7 +87,7 @@ internal fun DeviceScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)
-                    .clickable(enabled = state is BLEGenerics.State.Connected) {
+                    .clickable(enabled = enabled) {
                         val intent = Intent(context, DeviceService::class.java)
                         intent.action = "disconnect"
                         intent.putExtra("address", device.address)

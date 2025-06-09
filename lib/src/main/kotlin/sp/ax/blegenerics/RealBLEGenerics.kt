@@ -1,10 +1,18 @@
 package sp.ax.blegenerics
 
+import android.Manifest
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothManager
+import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanFilter
+import android.bluetooth.le.ScanResult
+import android.bluetooth.le.ScanSettings
 import android.content.Context
+import android.content.pm.PackageManager
+import android.location.LocationManager
+import android.os.Build
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,7 +29,26 @@ class RealBLEGenerics(
     private val default: CoroutineContext,
     private val context: Context,
 ) : BLEGenerics {
-    inner class InternalCallback : BluetoothGattCallback() {
+    private suspend fun toConnected(gatt: BluetoothGatt) {
+        when (_states.value[gatt.device.address]) {
+            BLEGenerics.State.Connecting -> onConnect(gatt = gatt)
+            else -> {
+                // todo
+            }
+        }
+    }
+
+    private suspend fun toDisconnected(address: String) {
+        when (_states.value[address]) {
+            BLEGenerics.State.Disconnecting -> onDisconnect(address = address)
+            BLEGenerics.State.Connecting, is BLEGenerics.State.Connected -> onSearching(address = address)
+            else -> {
+                // todo
+            }
+        }
+    }
+
+    private val gattCallback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(
             gatt: BluetoothGatt?,
             status: Int,
@@ -29,31 +56,11 @@ class RealBLEGenerics(
         ) {
             if (gatt == null) TODO("RealBLEGenerics:callback:no gatt!")
             println("[RealBLEGenerics]:onConnectionStateChange(${gatt.hashCode()}, $status, $newState)") // todo
-            when (newState) {
-                BluetoothGatt.STATE_CONNECTED -> {
-                    val address = gatt.device.address
-                    coroutineScope.launch {
-                        mutex.withLock {
-                            when (_states.value[address]) {
-                                BLEGenerics.State.Connecting -> onConnect(address = address, gatt = gatt)
-                                else -> {
-                                    // todo
-                                }
-                            }
-                        }
-                    }
-                }
-                BluetoothGatt.STATE_DISCONNECTED -> {
-                    val address = gatt.device.address
-                    coroutineScope.launch {
-                        mutex.withLock {
-                            when (_states.value[address]) {
-                                BLEGenerics.State.Disconnecting -> onDisconnect(address = address)
-                                else -> {
-                                    // todo
-                                }
-                            }
-                        }
+            coroutineScope.launch {
+                mutex.withLock {
+                    when (newState) {
+                        BluetoothGatt.STATE_CONNECTED -> toConnected(gatt = gatt)
+                        BluetoothGatt.STATE_DISCONNECTED -> toDisconnected(address = gatt.device.address)
                     }
                 }
             }
@@ -70,7 +77,71 @@ class RealBLEGenerics(
 
     private val mutex = Mutex()
 
-    private suspend fun onConnect(address: String, gatt: BluetoothGatt) {
+    private val scanSettings = ScanSettings
+        .Builder()
+        .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+        .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
+        .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
+        .setNumOfMatches(ScanSettings.MATCH_NUM_ONE_ADVERTISEMENT)
+        .setReportDelay(0L)
+        .build()
+    private val scanFilters = listOf(ScanFilter.Builder().build())
+    private val scanCallback = object : ScanCallback() {
+        override fun onScanResult(callbackType: Int, result: ScanResult?) {
+            val address = result?.device?.address ?: return
+            val state = _states.value[address] ?: return
+            if (state !is BLEGenerics.State.Searching) return
+            connect(address = address)
+            val count = _states.value.count { (_, state) -> state is BLEGenerics.State.Searching }
+            if (count > 1) return
+            try {
+                stopScan()
+            } catch (error: Throwable) {
+                // todo errors
+            }
+        }
+    }
+
+    private fun startScan() {
+        val bm = context.getSystemService(BluetoothManager::class.java)
+        val adapter = bm.adapter ?: TODO("RealBLEGenerics:startScan:no adapter!")
+        if (!adapter.isEnabled) TODO("RealBLEGenerics:startScan:adapter disabled!")
+        val lm = context.getSystemService(LocationManager::class.java)
+        if (!lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) TODO("RealBLEGenerics:startScan:gps disabled!")
+        if (context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            throw SecurityException("no permission: ${Manifest.permission.ACCESS_FINE_LOCATION}")
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (context.checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+                throw SecurityException("no permission: ${Manifest.permission.BLUETOOTH_SCAN}")
+            }
+        }
+        val scanner = adapter.bluetoothLeScanner ?: TODO("RealBLEGenerics:startScan:no scanner!")
+        scanner.startScan(scanFilters, scanSettings, scanCallback)
+    }
+
+    private fun stopScan() {
+        val bm = context.getSystemService(BluetoothManager::class.java)
+        val adapter = bm.adapter ?: TODO("RealBLEScanner:stopScan:no adapter!")
+        if (!adapter.isEnabled) return // todo
+        val scanner = adapter.bluetoothLeScanner ?: TODO("RealBLEScanner:stopScan:no scanner!")
+        scanner.stopScan(scanCallback)
+    }
+
+    private fun onSearching(address: String) {
+        if (_states.value.none { (_, state) -> state is BLEGenerics.State.Searching }) {
+            try {
+                startScan()
+            } catch (error: Throwable) {
+                // todo errors
+                return
+            }
+        }
+        _states.value += address to BLEGenerics.State.Searching
+    }
+
+    private suspend fun onConnect(gatt: BluetoothGatt) {
+        val address = gatt.device.address
         gatts[address] = gatt
         _states.value += address to BLEGenerics.State.Connected(
             isPaired = gatt.device.bondState == BluetoothDevice.BOND_BONDED,
@@ -84,25 +155,25 @@ class RealBLEGenerics(
         _events.emit(address to BLEGenerics.Event.OnDisconnect)
     }
 
-    private fun connect(address: String, callback: BluetoothGattCallback) {
-        val bm = context.getSystemService(BluetoothManager::class.java)
-        val adapter = bm.adapter ?: TODO("${this::class.java.simpleName}:onConnect($address):no adapter!")
-        if (!adapter.isEnabled) TODO("${this::class.java.simpleName}:onConnect($address):adapter disabled!")
-        val autoConnect = false
-        val transport = BluetoothDevice.TRANSPORT_LE
-        val device = adapter.getRemoteDevice(address) ?: TODO("${this::class.java.simpleName}:onConnect($address):no device!")
-        device.connectGatt(context, autoConnect, callback, transport)
-    }
-
     override fun connect(address: String) {
         coroutineScope.launch {
             mutex.withLock {
                 withContext(default) {
-                    if (_states.value.containsKey(address)) TODO("RealBLEGenerics:connect($address):state: ${_states.value[address]}")
+                    when (_states.value[address]) {
+                        BLEGenerics.State.Searching, null -> {
+                            // noop
+                        }
+                        else -> TODO("RealBLEGenerics:connect($address):state: ${_states.value[address]}")
+                    }
                     _states.value += address to BLEGenerics.State.Connecting
                     try {
-                        val callback = InternalCallback()
-                        connect(address = address, callback = callback)
+                        val bm = context.getSystemService(BluetoothManager::class.java)
+                        val adapter = bm.adapter ?: TODO("RealBLEGenerics:connect($address):no adapter!")
+                        if (!adapter.isEnabled) TODO("RealBLEGenerics:connect($address):adapter disabled!")
+                        val autoConnect = false
+                        val transport = BluetoothDevice.TRANSPORT_LE
+                        val device = adapter.getRemoteDevice(address) ?: TODO("RealBLEGenerics:connect($address):no device!")
+                        device.connectGatt(context, autoConnect, gattCallback, transport)
                     } catch (error: Throwable) {
                         // todo errors
                         _states.value -= address
@@ -116,7 +187,12 @@ class RealBLEGenerics(
         coroutineScope.launch {
             mutex.withLock {
                 withContext(default) {
-                    if (!_states.value.containsKey(address)) TODO("RealBLEGenerics:disconnect($address):state: ${_states.value[address]}")
+                    when (_states.value[address]) {
+                        BLEGenerics.State.Searching, is BLEGenerics.State.Connected -> {
+                            // noop
+                        }
+                        else -> TODO("RealBLEGenerics:disconnect($address):state: ${_states.value[address]}")
+                    }
                     val gatt = gatts[address] ?: TODO("RealBLEGenerics:disconnect($address):no gatt!")
                     _states.value += address to BLEGenerics.State.Disconnecting
                     try {
