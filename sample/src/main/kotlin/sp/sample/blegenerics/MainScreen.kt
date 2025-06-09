@@ -12,7 +12,7 @@ import sp.ax.blescanner.BLEDevice
 
 @Composable
 internal fun MainScreen() {
-    val _device = remember { mutableStateOf<BLEDevice?>(null) }
+    val _device = remember { mutableStateOf(App.locals.selectedDevice) }
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -22,6 +22,7 @@ internal fun MainScreen() {
         if (device == null) {
             ScannerScreen(
                 onSelectDevice = {
+                    App.locals.selectedDevice = it
                     _device.value = it
                 },
             )
@@ -29,6 +30,7 @@ internal fun MainScreen() {
             DeviceScreen(
                 device = device,
                 onDisconnect = {
+                    App.locals.selectedDevice = null
                     _device.value = null
                 },
             )

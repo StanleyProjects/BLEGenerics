@@ -1,20 +1,25 @@
 package sp.sample.blegenerics
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import sp.ax.blegenerics.BLEGenerics
 
@@ -22,6 +27,7 @@ internal class DeviceService : Service() {
     private val job = SupervisorJob()
     private val coroutineScope = CoroutineScope(Dispatchers.Main + job)
     private val generics = App.generics // todo
+    private val N_ID: Int = System.currentTimeMillis().toInt()
 
     private fun getBroadcast(states: Map<String, BLEGenerics.State>): Intent {
         val broadcast = Intent("states") // todo
@@ -55,6 +61,38 @@ internal class DeviceService : Service() {
         return broadcast
     }
 
+    private fun onStatesNotification(channel: NotificationChannel, states: Map<String, BLEGenerics.State>): Notification {
+        val context: Context = this
+        val builder = NotificationCompat.Builder(context, channel.id)
+            .setSmallIcon(android.R.drawable.ic_popup_sync)
+            .setAutoCancel(false)
+            .setOngoing(false)
+        if (states.size == 1) {
+            val (address, state) = states.entries.firstOrNull() ?: TODO()
+            builder.setContentText("$address: $state")
+            when (state) {
+                is BLEGenerics.State.Connected -> {
+                    val intent = Intent(context, DeviceService::class.java)
+                    intent.action = "disconnect"
+                    intent.putExtra("address", address)
+                    val stopIntent = PendingIntent.getService(context, 1, intent, PendingIntent.FLAG_IMMUTABLE)
+                    val action = NotificationCompat.Action.Builder(-1, "disconnect", stopIntent)
+                        .build()
+                    builder.addAction(action)
+                }
+                else -> {
+                    // noop
+                }
+            }
+        } else {
+            val text = states.toList().joinToString(separator = "\n") { (address, state) ->
+                "$address: $state"
+            }
+            builder.setContentText(text)
+        }
+        return builder.build()
+    }
+
     override fun onCreate() {
         super.onCreate()
         val channel = NotificationChannel(
@@ -67,9 +105,18 @@ internal class DeviceService : Service() {
             nm.createNotificationChannel(channel)
         }
         coroutineScope.launch {
-            generics.states.collect { states ->
+            generics.states.drop(1).collect { states ->
                 sendBroadcast(getBroadcast(states = states))
-                // todo notifications
+                val firstState = states.entries.firstOrNull()
+                if (firstState == null) {
+                    stopSelf()
+                } else if (states.size == 1 && firstState.value is BLEGenerics.State.Disconnecting) {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                } else {
+                    val notification = onStatesNotification(channel = channel, states = states)
+                    nm.notify(N_ID, notification)
+                    startForeground(N_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+                }
             }
         }
         coroutineScope.launch {

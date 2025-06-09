@@ -1,4 +1,4 @@
-package sp.sample.blegenerics
+package sp.ax.blegenerics
 
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
@@ -14,10 +14,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import sp.ax.blegenerics.BLEGenerics
 import kotlin.coroutines.CoroutineContext
 
-internal class RealBLEGenerics(
+class RealBLEGenerics(
     private val coroutineScope: CoroutineScope,
     private val default: CoroutineContext,
     private val context: Context,
@@ -29,33 +28,33 @@ internal class RealBLEGenerics(
             newState: Int,
         ) {
             if (gatt == null) TODO("RealBLEGenerics:callback:no gatt!")
-            val GATT_ERROR = 133 // https://stackoverflow.com/a/60849590
-            when (status) {
-                BluetoothGatt.GATT_SUCCESS -> {
-                    when (newState) {
-                        BluetoothGatt.STATE_CONNECTED -> {
-                            val address = gatt.device.address
-                            coroutineScope.launch {
-                                mutex.withLock {
-                                    onConnect(address = address, gatt = gatt)
-                                }
-                            }
-                        }
-                        BluetoothGatt.STATE_DISCONNECTED -> {
-                            val address = gatt.device.address
-                            coroutineScope.launch {
-                                mutex.withLock {
-                                    onDisconnect(address = address)
+            println("[RealBLEGenerics]:onConnectionStateChange(${gatt.hashCode()}, $status, $newState)") // todo
+            when (newState) {
+                BluetoothGatt.STATE_CONNECTED -> {
+                    val address = gatt.device.address
+                    coroutineScope.launch {
+                        mutex.withLock {
+                            when (_states.value[address]) {
+                                BLEGenerics.State.Connecting -> onConnect(address = address, gatt = gatt)
+                                else -> {
+                                    // todo
                                 }
                             }
                         }
                     }
                 }
-                GATT_ERROR -> {
-                    TODO("RealBLEGenerics:callback:onConnectionStateChange(${gatt?.hashCode()}, $status, $newState)")
-                }
-                else -> {
-                    // todo
+                BluetoothGatt.STATE_DISCONNECTED -> {
+                    val address = gatt.device.address
+                    coroutineScope.launch {
+                        mutex.withLock {
+                            when (_states.value[address]) {
+                                BLEGenerics.State.Disconnecting -> onDisconnect(address = address)
+                                else -> {
+                                    // todo
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -121,7 +120,11 @@ internal class RealBLEGenerics(
                     val gatt = gatts[address] ?: TODO("RealBLEGenerics:disconnect($address):no gatt!")
                     _states.value += address to BLEGenerics.State.Disconnecting
                     try {
-                        gatt.disconnect()
+                        val bm = context.getSystemService(BluetoothManager::class.java)
+                        when (bm.getConnectionState(gatt.device, BluetoothGatt.GATT)) {
+                            BluetoothGatt.STATE_DISCONNECTED -> onDisconnect(address = address)
+                            else -> gatt.disconnect()
+                        }
                     } catch (error: Throwable) {
                         TODO("RealBLEGenerics:disconnect($address):$error")
                     }
