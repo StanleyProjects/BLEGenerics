@@ -155,21 +155,25 @@ internal class DeviceService : Service() {
             return callbackFlow {
                 val receivers = object : BroadcastReceiver() {
                     override fun onReceive(context: Context?, intent: Intent?) {
-                        val address = intent?.getStringExtra("address") ?: return
-                        val state = when (intent.getStringExtra("name")) {
-                            "Connecting" -> BLEGenerics.State.Connecting(address = address)
-                            "Connected" -> {
-                                BLEGenerics.State.Connected(
-                                    address = address,
-                                    isPaired = intent.getBooleanExtra("isPaired", false)
-                                )
+                        val address = intent?.getStringExtra("address")
+                        if (address == null) {
+                            trySend(null)
+                        } else {
+                            val state = when (intent.getStringExtra("name")) {
+                                "Connecting" -> BLEGenerics.State.Connecting(address = address)
+                                "Connected" -> {
+                                    BLEGenerics.State.Connected(
+                                        address = address,
+                                        isPaired = intent.getBooleanExtra("isPaired", false)
+                                    )
+                                }
+                                "Searching" -> BLEGenerics.State.Searching(address = address)
+                                "Waiting" -> BLEGenerics.State.Waiting(address = address)
+                                "Disconnecting" -> BLEGenerics.State.Disconnecting(address = address)
+                                else -> return
                             }
-                            "Searching" -> BLEGenerics.State.Searching(address = address)
-                            "Waiting" -> BLEGenerics.State.Waiting(address = address)
-                            "Disconnecting" -> BLEGenerics.State.Disconnecting(address = address)
-                            else -> return
+                            trySend(state)
                         }
-                        trySend(state)
                     }
                 }
                 val filters = IntentFilter("states") // todo

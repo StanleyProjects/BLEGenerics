@@ -56,10 +56,10 @@ internal fun DeviceScreen(
     LaunchedEffect(Unit) {
         DeviceService.events(context = context).collect { event ->
             when (event) {
-                BLEGenerics.Event.OnConnect -> {
+                is BLEGenerics.Event.OnConnect -> {
                     // todo
                 }
-                BLEGenerics.Event.OnDisconnect -> onDisconnect()
+                is BLEGenerics.Event.OnDisconnect -> onDisconnect()
             }
         }
     }
@@ -73,13 +73,13 @@ internal fun DeviceScreen(
                 name: ${device.name}
                 address: ${device.address}
             """.trimIndent()
-            val enabled = when (pair?.second) {
-                BLEGenerics.State.Connected -> true
-                BLEGenerics.State.Searching -> true
+            val enabled = when (state) {
+                is BLEGenerics.State.Connected -> true
+                is BLEGenerics.State.Searching -> true
                 else -> false
             }
             BasicText(text = text)
-            BasicText(text = "state: ${pair?.second}")
+            BasicText(text = "$state")
             Spacer(Modifier.weight(1f)) // todo
             BasicText(
                 modifier = Modifier
