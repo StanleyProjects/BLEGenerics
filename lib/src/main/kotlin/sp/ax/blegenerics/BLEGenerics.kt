@@ -5,20 +5,24 @@ import kotlinx.coroutines.flow.StateFlow
 
 interface BLEGenerics {
     sealed interface State {
-        data object Connecting : State
-        data class Connected(val isPaired: Boolean) : State
-        data object Disconnecting : State
-        data object Searching : State
-        data object Waiting : State
+        val address: String
+
+        data class Connecting(override val address: String) : State
+        data class Connected(override val address: String, val isPaired: Boolean) : State
+        data class Searching(override val address: String) : State
+        data class Waiting(override val address: String) : State
+        data class Disconnecting(override val address: String) : State
     }
 
-    enum class Event {
-        OnConnect,
-        OnDisconnect,
+    sealed interface Event {
+        val address: String
+
+        data class OnConnect(override val address: String) : Event
+        data class OnDisconnect(override val address: String) : Event
     }
 
-    val states: StateFlow<Map<String, State>>
-    val events: SharedFlow<Pair<String, Event>>
+    val states: StateFlow<State?>
+    val events: SharedFlow<Event>
 
     fun connect(address: String)
     fun disconnect(address: String)

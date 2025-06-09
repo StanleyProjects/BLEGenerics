@@ -71,10 +71,10 @@ class RealBLEGenerics(
         }
     }
 
-    private val _states = MutableStateFlow<Map<String, BLEGenerics.State>>(emptyMap())
+    private val _states = MutableStateFlow<BLEGenerics.State?>(null)
     override val states = _states.asStateFlow()
 
-    private val _events = MutableSharedFlow<Pair<String, BLEGenerics.Event>>()
+    private val _events = MutableSharedFlow<BLEGenerics.Event>()
     override val events = _events.asSharedFlow()
 
     private val gatts = mutableMapOf<String, BluetoothGatt>()
@@ -120,7 +120,7 @@ class RealBLEGenerics(
         }
     }
 
-    
+
     private val receivers = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (context == null) return
@@ -157,29 +157,24 @@ class RealBLEGenerics(
     init {
         coroutineScope.launch {
             withContext(default) {
-                states.collect { states ->
-                    val firstState = states.entries.firstOrNull()
-                    if (firstState != null) {
-                        if (states.size == 1) {
-                            when (firstState.value) {
-                                BLEGenerics.State.Disconnecting -> {
-                                    context.unregisterReceiver(receivers)
-                                }
-                                BLEGenerics.State.Connecting -> {
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                        context.registerReceiver(
-                                            receivers,
-                                            intentFilters,
-                                            Context.RECEIVER_NOT_EXPORTED,
-                                        )
-                                    } else {
-                                        context.registerReceiver(receivers, intentFilters)
-                                    }
-                                }
-                                else -> {
-                                    // noop
-                                }
+                states.collect { state ->
+                    when (state) {
+                        BLEGenerics.State.Disconnecting -> {
+                            context.unregisterReceiver(receivers)
+                        }
+                        BLEGenerics.State.Connecting -> {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                context.registerReceiver(
+                                    receivers,
+                                    intentFilters,
+                                    Context.RECEIVER_NOT_EXPORTED,
+                                )
+                            } else {
+                                context.registerReceiver(receivers, intentFilters)
                             }
+                        }
+                        else -> {
+                            // noop
                         }
                     }
                 }

@@ -34,11 +34,11 @@ internal fun DeviceScreen(
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val state = remember { DeviceService.states(context = context) }
-        .collectAsStateWithLifecycle(emptyMap(), minActiveState = Lifecycle.State.RESUMED)
-        .value[device.address]
+        .collectAsStateWithLifecycle(null, minActiveState = Lifecycle.State.RESUMED)
+        .value
     LaunchedEffect(Unit) {
-        DeviceService.states(context = context).take(1).collect { states ->
-            if (!states.containsKey(device.address)) {
+        DeviceService.states(context = context).take(1).collect { state ->
+            if (state == null) {
                 val intent = Intent(context, DeviceService::class.java)
                 intent.action = "connect"
                 intent.putExtra("address", device.address)
@@ -54,14 +54,12 @@ internal fun DeviceScreen(
         }
     }
     LaunchedEffect(Unit) {
-        DeviceService.events(context = context).collect { (address, event) ->
-            if (address == device.address) {
-                when (event) {
-                    BLEGenerics.Event.OnConnect -> {
-                        // todo
-                    }
-                    BLEGenerics.Event.OnDisconnect -> onDisconnect()
+        DeviceService.events(context = context).collect { event ->
+            when (event) {
+                BLEGenerics.Event.OnConnect -> {
+                    // todo
                 }
+                BLEGenerics.Event.OnDisconnect -> onDisconnect()
             }
         }
     }
@@ -75,13 +73,13 @@ internal fun DeviceScreen(
                 name: ${device.name}
                 address: ${device.address}
             """.trimIndent()
-            val enabled = when (state) {
-                is BLEGenerics.State.Connected -> true
+            val enabled = when (pair?.second) {
+                BLEGenerics.State.Connected -> true
                 BLEGenerics.State.Searching -> true
                 else -> false
             }
             BasicText(text = text)
-            BasicText(text = "state: $state")
+            BasicText(text = "state: ${pair?.second}")
             Spacer(Modifier.weight(1f)) // todo
             BasicText(
                 modifier = Modifier

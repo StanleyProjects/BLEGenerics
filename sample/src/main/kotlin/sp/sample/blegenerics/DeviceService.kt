@@ -29,23 +29,23 @@ internal class DeviceService : Service() {
     private val generics = App.generics // todo
     private val N_ID: Int = System.currentTimeMillis().toInt()
 
-    private fun getBroadcast(states: Map<String, BLEGenerics.State>): Intent {
+    private fun getBroadcast(state: BLEGenerics.State?): Intent {
         val broadcast = Intent("states") // todo
         broadcast.setPackage(packageName) // https://stackoverflow.com/a/76920719/4398606
-        val entries = states.entries.toList()
-        broadcast.putExtra("addresses", entries.map { (address, _) -> address }.toTypedArray())
-        val names = entries.map { (_, value) ->
-            when (value) {
+        broadcast.putExtra("address", state?.address)
+        if (state != null) {
+            val name = when (state) {
                 is BLEGenerics.State.Connected -> "Connected"
-                BLEGenerics.State.Connecting -> "Connecting"
-                BLEGenerics.State.Disconnecting -> "Disconnecting"
-                BLEGenerics.State.Searching -> "Searching"
+                is BLEGenerics.State.Connecting -> "Connecting"
+                is BLEGenerics.State.Disconnecting -> "Disconnecting"
+                is BLEGenerics.State.Searching -> "Searching"
+                is BLEGenerics.State.Waiting -> "Waiting"
             }
-        }
-        broadcast.putExtra("names", names.toTypedArray())
-        entries.forEach { (address, value) ->
-            when (value) {
-                is BLEGenerics.State.Connected -> broadcast.putExtra("$address:paired", value.isPaired)
+            broadcast.putExtra("name", name)
+            when (state) {
+                is BLEGenerics.State.Connected -> {
+                    broadcast.putExtra("isPaired", state.isPaired)
+                }
                 else -> {
                     // noop
                 }
@@ -54,42 +54,38 @@ internal class DeviceService : Service() {
         return broadcast
     }
 
-    private fun getBroadcast(address: String, event: BLEGenerics.Event): Intent {
+    private fun getBroadcast(event: BLEGenerics.Event): Intent {
         val broadcast = Intent("events") // todo
         broadcast.setPackage(packageName) // https://stackoverflow.com/a/76920719/4398606
-        broadcast.putExtra("address", address)
-        broadcast.putExtra("event", event.name)
+        broadcast.putExtra("address", event.address)
+        val name = when (event) {
+            is BLEGenerics.Event.OnConnect -> "OnConnect"
+            is BLEGenerics.Event.OnDisconnect -> "OnDisconnect"
+        }
+        broadcast.putExtra("name", name)
         return broadcast
     }
 
-    private fun onStatesNotification(channel: NotificationChannel, states: Map<String, BLEGenerics.State>): Notification {
+    private fun onStatesNotification(channel: NotificationChannel, state: BLEGenerics.State): Notification {
         val context: Context = this
         val builder = NotificationCompat.Builder(context, channel.id)
             .setSmallIcon(android.R.drawable.ic_popup_sync)
+            .setContentText("$state")
             .setAutoCancel(false)
             .setOngoing(false)
-        if (states.size == 1) {
-            val (address, state) = states.entries.firstOrNull() ?: TODO()
-            builder.setContentText("$address: $state")
-            when (state) {
-                is BLEGenerics.State.Connected, is BLEGenerics.State.Searching -> {
-                    val intent = Intent(context, DeviceService::class.java)
-                    intent.action = "disconnect"
-                    intent.putExtra("address", address)
-                    val stopIntent = PendingIntent.getService(context, 1, intent, PendingIntent.FLAG_IMMUTABLE)
-                    val action = NotificationCompat.Action.Builder(-1, "disconnect", stopIntent)
-                        .build()
-                    builder.addAction(action)
-                }
-                else -> {
-                    // noop
-                }
+        when (state) {
+            is BLEGenerics.State.Connected, is BLEGenerics.State.Searching -> {
+                val intent = Intent(context, DeviceService::class.java)
+                intent.action = "disconnect"
+                intent.putExtra("address", state.address)
+                val stopIntent = PendingIntent.getService(context, 1, intent, PendingIntent.FLAG_IMMUTABLE)
+                val action = NotificationCompat.Action.Builder(-1, "disconnect", stopIntent)
+                    .build()
+                builder.addAction(action)
             }
-        } else {
-            val text = states.toList().joinToString(separator = "\n") { (address, state) ->
-                "$address: $state"
+            else -> {
+                // noop
             }
-            builder.setContentText(text)
         }
         return builder.build()
     }
@@ -106,24 +102,22 @@ internal class DeviceService : Service() {
             nm.createNotificationChannel(channel)
         }
         coroutineScope.launch {
-            generics.states.drop(1).collect { states ->
-                sendBroadcast(getBroadcast(states = states))
-                val firstState = states.entries.firstOrNull()
-                if (firstState == null) {
-                    stopSelf()
-                } else if (states.size == 1 && firstState.value is BLEGenerics.State.Disconnecting) {
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                } else {
-                    val notification = onStatesNotification(channel = channel, states = states)
-                    nm.notify(N_ID, notification)
-                    startForeground(N_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+            generics.states.drop(1).collect { state ->
+                sendBroadcast(getBroadcast(state = state))
+                when (state) {
+                    null -> stopSelf()
+                    is BLEGenerics.State.Disconnecting -> stopForeground(STOP_FOREGROUND_REMOVE)
+                    else -> {
+                        val notification = onStatesNotification(channel = channel, state = state)
+                        nm.notify(N_ID, notification)
+                        startForeground(N_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+                    }
                 }
             }
         }
         coroutineScope.launch {
-            generics.events.collect { (address, event) ->
-                sendBroadcast(getBroadcast(address = address, event = event))
-                // todo notifications
+            generics.events.collect { event ->
+                sendBroadcast(getBroadcast(event = event))
             }
         }
     }
@@ -145,7 +139,7 @@ internal class DeviceService : Service() {
                 generics.disconnect(address = address)
             }
             "states" -> {
-                sendBroadcast(getBroadcast(states = generics.states.value))
+                sendBroadcast(getBroadcast(generics.states.value))
             }
         }
         return START_NOT_STICKY
@@ -157,30 +151,25 @@ internal class DeviceService : Service() {
     }
 
     companion object {
-        fun states(context: Context): Flow<Map<String, BLEGenerics.State>> {
+        fun states(context: Context): Flow<BLEGenerics.State?> {
             return callbackFlow {
                 val receivers = object : BroadcastReceiver() {
                     override fun onReceive(context: Context?, intent: Intent?) {
-                        val addresses = intent?.getStringArrayExtra("addresses") ?: return
-                        val names = intent.getStringArrayExtra("names") ?: return
-                        if (addresses.size != names.size) return
-                        val states = mutableMapOf<String, BLEGenerics.State>()
-                        for (index in addresses.indices) {
-                            val address = addresses[index]
-                            val name = names[index]
-                            val state = when (name) {
-                                "Connected" -> {
-                                    val isPaired = intent.getBooleanExtra("$address:paired", false)
-                                    BLEGenerics.State.Connected(isPaired = isPaired)
-                                }
-                                "Connecting" -> BLEGenerics.State.Connecting
-                                "Disconnecting" -> BLEGenerics.State.Disconnecting
-                                "Searching" -> BLEGenerics.State.Searching
-                                else -> continue
+                        val address = intent?.getStringExtra("address") ?: return
+                        val state = when (intent.getStringExtra("name")) {
+                            "Connecting" -> BLEGenerics.State.Connecting(address = address)
+                            "Connected" -> {
+                                BLEGenerics.State.Connected(
+                                    address = address,
+                                    isPaired = intent.getBooleanExtra("isPaired", false)
+                                )
                             }
-                            states[address] = state
+                            "Searching" -> BLEGenerics.State.Searching(address = address)
+                            "Waiting" -> BLEGenerics.State.Waiting(address = address)
+                            "Disconnecting" -> BLEGenerics.State.Disconnecting(address = address)
+                            else -> return
                         }
-                        trySend(states)
+                        trySend(state)
                     }
                 }
                 val filters = IntentFilter("states") // todo
@@ -199,15 +188,17 @@ internal class DeviceService : Service() {
             }
         }
 
-        fun events(context: Context): Flow<Pair<String, BLEGenerics.Event>> {
+        fun events(context: Context): Flow<BLEGenerics.Event> {
             return callbackFlow {
                 val receivers = object : BroadcastReceiver() {
                     override fun onReceive(context: Context?, intent: Intent?) {
                         val address = intent?.getStringExtra("address") ?: return
-                        val event = intent.getStringExtra("event")?.let { name ->
-                            BLEGenerics.Event.entries.firstOrNull { it.name == name }
-                        } ?: return
-                        trySend(address to event)
+                        val event = when (intent.getStringExtra("name")) {
+                            "OnConnect" -> BLEGenerics.Event.OnConnect(address = address)
+                            "OnDisconnect" -> BLEGenerics.Event.OnDisconnect(address = address)
+                            else -> return
+                        }
+                        trySend(event)
                     }
                 }
                 val filters = IntentFilter("events") // todo
