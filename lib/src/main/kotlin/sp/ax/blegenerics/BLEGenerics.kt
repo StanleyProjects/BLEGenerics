@@ -9,6 +9,7 @@ interface BLEGenerics {
         data class Connected(val isPaired: Boolean) : State
         data object Disconnecting : State
         data object Searching : State
+        data object Waiting : State
     }
 
     enum class Event {
