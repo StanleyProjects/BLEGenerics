@@ -74,7 +74,7 @@ internal class DeviceService : Service() {
             .setAutoCancel(false)
             .setOngoing(false)
         when (state) {
-            is BLEGenerics.State.Connected, is BLEGenerics.State.Searching -> {
+            is BLEGenerics.State.Connected, is BLEGenerics.State.Searching, is BLEGenerics.State.Waiting -> {
                 val intent = Intent(context, DeviceService::class.java)
                 intent.action = "disconnect"
                 intent.putExtra("address", state.address)

@@ -76,6 +76,7 @@ internal fun DeviceScreen(
             val enabled = when (state) {
                 is BLEGenerics.State.Connected -> true
                 is BLEGenerics.State.Searching -> true
+                is BLEGenerics.State.Waiting -> true
                 else -> false
             }
             BasicText(text = text)

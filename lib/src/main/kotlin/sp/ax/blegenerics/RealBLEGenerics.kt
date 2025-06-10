@@ -125,12 +125,6 @@ class RealBLEGenerics(
             }
             is BLEGenerics.State.Connected, is BLEGenerics.State.Connecting -> {
                 if (!adapter.isEnabled || !isLocationEnabled) {
-                    try {
-                        gatt?.close()
-                    } catch (error: Throwable) {
-                        TODO("RealBLEGenerics:fromWaiting(${state.address}):$error")
-                    }
-                    gatt = null
                     _states.value = BLEGenerics.State.Waiting(address = state.address)
                 }
             }
@@ -194,6 +188,14 @@ class RealBLEGenerics(
                             } else {
                                 context.registerReceiver(receivers, intentFilters)
                             }
+                        }
+                        is BLEGenerics.State.Waiting -> {
+                            try {
+                                gatt?.close()
+                            } catch (error: Throwable) {
+                                TODO("RealBLEGenerics:init(${state.address}):$error")
+                            }
+                            gatt = null
                         }
                         else -> {
                             // noop
@@ -260,6 +262,19 @@ class RealBLEGenerics(
         _events.emit(BLEGenerics.Event.OnDisconnect(address = address))
     }
 
+    private fun connectGatt(address: String) {
+        println("[RealBLEGenerics]:connectGatt($address)") // todo
+        val bm = context.getSystemService(BluetoothManager::class.java)
+        val adapter = bm.adapter ?: TODO("RealBLEGenerics:connectGatt($address):no adapter!")
+        if (!adapter.isEnabled) {
+            throw BLEGenericsException(type = BLEGenericsException.Type.BTDisabled)
+        }
+        val autoConnect = false
+        val transport = BluetoothDevice.TRANSPORT_LE
+        val device = adapter.getRemoteDevice(address) ?: TODO("RealBLEGenerics:connectGatt($address):no device!")
+        device.connectGatt(context, autoConnect, gattCallback, transport)
+    }
+
     override fun connect(address: String) {
         coroutineScope.launch {
             mutex.withLock {
@@ -275,13 +290,9 @@ class RealBLEGenerics(
                     }
                     _states.value = BLEGenerics.State.Connecting(address = address)
                     try {
-                        val bm = context.getSystemService(BluetoothManager::class.java)
-                        val adapter = bm.adapter ?: TODO("RealBLEGenerics:connect($address):no adapter!")
-                        if (!adapter.isEnabled) TODO("RealBLEGenerics:connect($address):adapter disabled!")
-                        val autoConnect = false
-                        val transport = BluetoothDevice.TRANSPORT_LE
-                        val device = adapter.getRemoteDevice(address) ?: TODO("RealBLEGenerics:connect($address):no device!")
-                        device.connectGatt(context, autoConnect, gattCallback, transport)
+                        connectGatt(address = address)
+                    } catch (error: BLEGenericsException) {
+                        _states.value = BLEGenerics.State.Waiting(address = address)
                     } catch (error: Throwable) {
                         TODO("RealBLEGenerics:connect($address):$error")
                     }
@@ -294,22 +305,29 @@ class RealBLEGenerics(
         coroutineScope.launch {
             mutex.withLock {
                 withContext(default) {
-                    when (val state = _states.value) {
-                        is BLEGenerics.State.Searching, is BLEGenerics.State.Connected -> {
-                            if (state.address != address) TODO("RealBLEGenerics:disconnect($address):state: $state")
+                    val state = _states.value
+                    val gatt = gatt
+                    if (state is BLEGenerics.State.Waiting && gatt == null) {
+                        if (state.address != address) TODO("RealBLEGenerics:disconnect($address):state: $state")
+                        onDisconnect(address = address)
+                    } else {
+                        when (state) {
+                            is BLEGenerics.State.Searching, is BLEGenerics.State.Connected, is BLEGenerics.State.Waiting -> {
+                                if (state.address != address) TODO("RealBLEGenerics:disconnect($address):state: $state")
+                            }
+                            else -> TODO("RealBLEGenerics:disconnect($address):state: $state")
                         }
-                        else -> TODO("RealBLEGenerics:disconnect($address):state: $state")
-                    }
-                    val gatt = gatt ?: TODO("RealBLEGenerics:disconnect($address):no gatt!")
-                    _states.value = BLEGenerics.State.Disconnecting(address = address)
-                    try {
-                        val bm = context.getSystemService(BluetoothManager::class.java)
-                        when (bm.getConnectionState(gatt.device, BluetoothGatt.GATT)) {
-                            BluetoothGatt.STATE_DISCONNECTED -> onDisconnect(address = address)
-                            else -> gatt.disconnect()
+                        _states.value = BLEGenerics.State.Disconnecting(address = address)
+                        if (gatt == null) TODO("RealBLEGenerics:disconnect($address):no gatt!")
+                        try {
+                            val bm = context.getSystemService(BluetoothManager::class.java)
+                            when (bm.getConnectionState(gatt.device, BluetoothGatt.GATT)) {
+                                BluetoothGatt.STATE_DISCONNECTED -> onDisconnect(address = address)
+                                else -> gatt.disconnect()
+                            }
+                        } catch (error: Throwable) {
+                            TODO("RealBLEGenerics:disconnect($address):$error")
                         }
-                    } catch (error: Throwable) {
-                        TODO("RealBLEGenerics:disconnect($address):$error")
                     }
                 }
             }
