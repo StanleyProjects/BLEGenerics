@@ -36,16 +36,11 @@ object BLEGenericsReceivers {
                     }
                 }
             }
-            val filters = IntentFilter(BLEGenericsService.BLEGenericsStatesAction)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                context.registerReceiver(
-                    receivers,
-                    filters,
-                    Context.RECEIVER_NOT_EXPORTED,
-                )
-            } else {
-                context.registerReceiver(receivers, filters)
-            }
+            register(
+                context = context,
+                receivers = receivers,
+                filters = IntentFilter(BLEGenericsService.BLEGenericsStatesAction),
+            )
             awaitClose {
                 context.unregisterReceiver(receivers)
             }
@@ -69,19 +64,30 @@ object BLEGenericsReceivers {
                     trySend(event)
                 }
             }
-            val filters = IntentFilter(BLEGenericsService.BLEGenericsEventsAction)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                context.registerReceiver(
-                    receivers,
-                    filters,
-                    Context.RECEIVER_NOT_EXPORTED,
-                )
-            } else {
-                context.registerReceiver(receivers, filters)
-            }
+            register(
+                context = context,
+                receivers = receivers,
+                filters = IntentFilter(BLEGenericsService.BLEGenericsEventsAction),
+            )
             awaitClose {
                 context.unregisterReceiver(receivers)
             }
+        }
+    }
+
+    internal fun register(
+        context: Context,
+        receivers: BroadcastReceiver,
+        filters: IntentFilter,
+    ) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(
+                receivers,
+                filters,
+                Context.RECEIVER_NOT_EXPORTED,
+            )
+        } else {
+            context.registerReceiver(receivers, filters)
         }
     }
 }

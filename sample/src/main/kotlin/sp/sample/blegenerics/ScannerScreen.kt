@@ -86,6 +86,18 @@ internal fun ScannerScreen(
                     }
                 }
             }
+            if (_devices.value.isNotEmpty()) {
+                BasicText(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .clickable(enabled = _devices.value.isNotEmpty()) {
+                            _devices.value = emptyList()
+                        }
+                        .wrapContentSize(),
+                    text = "clear",
+                )
+            }
             val enabled = state == BLEScanner.State.Started || state == BLEScanner.State.Stopped
             val text = when (state) {
                 BLEScanner.State.Started -> "stop"

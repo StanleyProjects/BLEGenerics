@@ -36,6 +36,10 @@ class RealBLEGenerics(
     private val default: CoroutineContext,
     private val context: Context,
 ) : BLEGenerics {
+    private interface GattOwner {
+        val gatt: BluetoothGatt
+    }
+
     private sealed interface InternalState : Comparable<InternalState?> {
         val ordinal: Int
         val address: String
@@ -43,15 +47,19 @@ class RealBLEGenerics(
         data class Connecting(
             override val address: String,
         ) : InternalState {
-            override val ordinal = 9
+            override val ordinal = 4
         }
 
-        data class Connected(
+        class Connected(
             override val address: String,
             val isPaired: Boolean,
-            val gatt: BluetoothGatt,
-        ) : InternalState {
+            override val gatt: BluetoothGatt,
+        ) : InternalState, GattOwner {
             override val ordinal = Ordinal
+
+            override fun toString(): String {
+                return "Connected(address: $address, isPaired: $isPaired, gatt: ${gatt.hashCode()})"
+            }
 
             companion object : Comparable<InternalState?> {
                 const val Ordinal = 10
@@ -63,30 +71,48 @@ class RealBLEGenerics(
             }
         }
 
-        data class Pairing(
+        class Pairing(
             override val address: String,
-            val gatt: BluetoothGatt,
+            override val gatt: BluetoothGatt,
             val pin: String?,
-        ) : InternalState {
+        ) : InternalState, GattOwner {
             override val ordinal = 11
+
+            override fun toString(): String {
+                return "Pairing(address: $address, gatt: ${gatt.hashCode()}, pin: $pin)"
+            }
+        }
+
+        class Disconnecting(
+            override val address: String,
+            override val gatt: BluetoothGatt,
+        ) : InternalState, GattOwner {
+            override val ordinal = Ordinal
+
+            override fun toString(): String {
+                return "Disconnecting(address: $address, gatt: ${gatt.hashCode()})"
+            }
+
+            companion object : Comparable<InternalState?> {
+                const val Ordinal = 5
+
+                override fun compareTo(other: InternalState?): Int {
+                    if (other == null) return 1
+                    return Ordinal.compareTo(other.ordinal)
+                }
+            }
         }
 
         data class Searching(
             override val address: String,
         ) : InternalState {
-            override val ordinal = 8
+            override val ordinal = 2
         }
 
         data class Waiting(
             override val address: String,
         ) : InternalState {
-            override val ordinal = 7
-        }
-
-        data class Disconnecting(
-            override val address: String,
-        ) : InternalState {
-            override val ordinal = 6
+            override val ordinal = 1
         }
 
         infix fun below(newState: InternalState?): Boolean {
@@ -373,28 +399,25 @@ class RealBLEGenerics(
         coroutineScope.launch {
             withContext(default) {
                 _allStates.collect { (oldState, newState) ->
+                    println("[RealBLEGenerics]:$oldState -> $newState") // todo
+                    if (oldState == null && newState != null) {
+                        BLEGenericsReceivers.register(context, receivers, intentFilters)
+                    } else if (oldState != null && newState == null) {
+                        context.unregisterReceiver(receivers)
+                    }
                     if (InternalState.Connected <= oldState && InternalState.Connected > newState) {
                         context.unregisterReceiver(receiversConnected)
+                    }
+                    if (oldState is GattOwner && newState !is GattOwner) {
+                        try {
+                            oldState.gatt.close()
+                        } catch (error: Throwable) {
+                            TODO("RealBLEGenerics:init($oldState -> $newState):$error")
+                        }
                     }
                     when (oldState) {
                         is InternalState.Pairing -> {
                             context.unregisterReceiver(receiversPairing)
-                            if (InternalState.Connected > newState) {
-                                try {
-                                    oldState.gatt.close()
-                                } catch (error: Throwable) {
-                                    TODO("RealBLEGenerics:init($oldState -> $newState):$error")
-                                }
-                            }
-                        }
-                        is InternalState.Connected -> {
-                            if (InternalState.Connected > newState) {
-                                try {
-                                    oldState.gatt.close()
-                                } catch (error: Throwable) {
-                                    TODO("RealBLEGenerics:init($oldState -> $newState):$error")
-                                }
-                            }
                         }
                         is InternalState.Searching -> {
                             try {
@@ -408,41 +431,11 @@ class RealBLEGenerics(
                         }
                     }
                     when (newState) {
-                        is InternalState.Disconnecting -> {
-                            context.unregisterReceiver(receivers)
-                        }
-                        is InternalState.Connecting -> {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                context.registerReceiver(
-                                    receivers,
-                                    intentFilters,
-                                    Context.RECEIVER_NOT_EXPORTED,
-                                )
-                            } else {
-                                context.registerReceiver(receivers, intentFilters)
-                            }
-                        }
                         is InternalState.Connected -> {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                context.registerReceiver(
-                                    receiversConnected,
-                                    intentFiltersConnected,
-                                    Context.RECEIVER_NOT_EXPORTED,
-                                )
-                            } else {
-                                context.registerReceiver(receiversConnected, intentFiltersConnected)
-                            }
+                            BLEGenericsReceivers.register(context, receiversConnected, intentFiltersConnected)
                         }
                         is InternalState.Pairing -> {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                context.registerReceiver(
-                                    receiversPairing,
-                                    intentFiltersPairing,
-                                    Context.RECEIVER_NOT_EXPORTED,
-                                )
-                            } else {
-                                context.registerReceiver(receiversPairing, intentFiltersPairing)
-                            }
+                            BLEGenericsReceivers.register(context, receiversPairing, intentFiltersPairing)
                         }
                         is InternalState.Searching -> {
                             try {
@@ -550,12 +543,12 @@ class RealBLEGenerics(
                 withContext(default) {
                     when (val state = _states.value) {
                         is InternalState.Connected -> {
-                            _states.value = InternalState.Disconnecting(address = address)
+                            _states.value = InternalState.Disconnecting(address = address, gatt = state.gatt)
                             try {
                                 val bm = context.getSystemService(BluetoothManager::class.java)
                                 when (bm.getConnectionState(state.gatt.device, BluetoothGatt.GATT)) {
-                                    BluetoothGatt.STATE_DISCONNECTED -> onDisconnect(address = address)
-                                    else -> state.gatt.disconnect()
+                                    BluetoothGatt.STATE_CONNECTED -> state.gatt.disconnect()
+                                    else -> onDisconnect(address = address)
                                 }
                             } catch (error: Throwable) {
                                 TODO("RealBLEGenerics:disconnect($address):$error")
