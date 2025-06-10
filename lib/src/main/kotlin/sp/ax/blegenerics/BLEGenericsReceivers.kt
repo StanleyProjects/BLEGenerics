@@ -1,0 +1,82 @@
+package sp.ax.blegenerics
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.Build
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+
+object BLEGenericsReceivers {
+    fun states(context: Context): Flow<BLEGenerics.State?> {
+        return callbackFlow {
+            val receivers = object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    val address = intent?.getStringExtra("address")
+                    if (address == null) {
+                        trySend(null)
+                    } else {
+                        val state = when (intent.getStringExtra("name")) {
+                            "Connecting" -> BLEGenerics.State.Connecting(address = address)
+                            "Connected" -> {
+                                BLEGenerics.State.Connected(
+                                    address = address,
+                                    isPaired = intent.getBooleanExtra("isPaired", false)
+                                )
+                            }
+                            "Searching" -> BLEGenerics.State.Searching(address = address)
+                            "Waiting" -> BLEGenerics.State.Waiting(address = address)
+                            "Disconnecting" -> BLEGenerics.State.Disconnecting(address = address)
+                            else -> return
+                        }
+                        trySend(state)
+                    }
+                }
+            }
+            val filters = IntentFilter(BLEGenericsService.BLEGenericsStatesAction)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.registerReceiver(
+                    receivers,
+                    filters,
+                    Context.RECEIVER_NOT_EXPORTED,
+                )
+            } else {
+                context.registerReceiver(receivers, filters)
+            }
+            awaitClose {
+                context.unregisterReceiver(receivers)
+            }
+        }
+    }
+
+    fun events(context: Context): Flow<BLEGenerics.Event> {
+        return callbackFlow {
+            val receivers = object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    val address = intent?.getStringExtra("address") ?: return
+                    val event = when (intent.getStringExtra("name")) {
+                        "OnConnect" -> BLEGenerics.Event.OnConnect(address = address)
+                        "OnDisconnect" -> BLEGenerics.Event.OnDisconnect(address = address)
+                        else -> return
+                    }
+                    trySend(event)
+                }
+            }
+            val filters = IntentFilter(BLEGenericsService.BLEGenericsEventsAction)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.registerReceiver(
+                    receivers,
+                    filters,
+                    Context.RECEIVER_NOT_EXPORTED,
+                )
+            } else {
+                context.registerReceiver(receivers, filters)
+            }
+            awaitClose {
+                context.unregisterReceiver(receivers)
+            }
+        }
+    }
+}

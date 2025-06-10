@@ -1,6 +1,5 @@
 package sp.sample.blegenerics
 
-import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -24,6 +23,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.flow.take
 import sp.ax.blegenerics.BLEGenerics
+import sp.ax.blegenerics.BLEGenericsReceivers
+import sp.ax.blegenerics.connect
+import sp.ax.blegenerics.disconnect
+import sp.ax.blegenerics.states
 import sp.ax.blescanner.BLEDevice
 
 @Composable
@@ -33,28 +36,23 @@ internal fun DeviceScreen(
 ) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    val state = remember { DeviceService.states(context = context) }
+    val state = remember { BLEGenericsReceivers.states(context = context) }
         .collectAsStateWithLifecycle(null, minActiveState = Lifecycle.State.RESUMED)
         .value
     LaunchedEffect(Unit) {
-        DeviceService.states(context = context).take(1).collect { state ->
+        BLEGenericsReceivers.states(context = context).take(1).collect { state ->
             if (state == null) {
-                val intent = Intent(context, DeviceService::class.java)
-                intent.action = "connect"
-                intent.putExtra("address", device.address)
-                context.startService(intent)
+                connect<DeviceService>(context = context, address = device.address)
             }
         }
     }
     LaunchedEffect(Unit) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            val intent = Intent(context, DeviceService::class.java)
-            intent.action = "states"
-            context.startService(intent)
+            states<DeviceService>(context = context)
         }
     }
     LaunchedEffect(Unit) {
-        DeviceService.events(context = context).collect { event ->
+        BLEGenericsReceivers.events(context = context).collect { event ->
             when (event) {
                 is BLEGenerics.Event.OnConnect -> {
                     // todo
@@ -87,10 +85,7 @@ internal fun DeviceScreen(
                     .fillMaxWidth()
                     .height(48.dp)
                     .clickable(enabled = enabled) {
-                        val intent = Intent(context, DeviceService::class.java)
-                        intent.action = "disconnect"
-                        intent.putExtra("address", device.address)
-                        context.startService(intent)
+                        disconnect<DeviceService>(context = context, address = device.address)
                     }
                     .wrapContentSize(),
                 text = "disconnect",
