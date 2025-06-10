@@ -20,6 +20,7 @@ interface BLEGenerics {
 
         data class OnConnect(override val address: String) : Event
         data class OnDisconnect(override val address: String) : Event
+        data class OnPairing(override val address: String, val isSuccess: Boolean) : Event
     }
 
     val states: StateFlow<State?>

@@ -55,8 +55,17 @@ abstract class BLEGenericsService(
         val name = when (event) {
             is BLEGenerics.Event.OnConnect -> "OnConnect"
             is BLEGenerics.Event.OnDisconnect -> "OnDisconnect"
+            is BLEGenerics.Event.OnPairing -> "OnPairing"
         }
         broadcast.putExtra("name", name)
+        when (event) {
+            is BLEGenerics.Event.OnPairing -> {
+                broadcast.putExtra("isSuccess", event.isSuccess)
+            }
+            else -> {
+                // noop
+            }
+        }
         return broadcast
     }
 

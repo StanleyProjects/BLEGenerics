@@ -60,6 +60,10 @@ object BLEGenericsReceivers {
                     val event = when (intent.getStringExtra("name")) {
                         "OnConnect" -> BLEGenerics.Event.OnConnect(address = address)
                         "OnDisconnect" -> BLEGenerics.Event.OnDisconnect(address = address)
+                        "OnPairing" -> BLEGenerics.Event.OnPairing(
+                            address = address,
+                            isSuccess = intent.getBooleanExtra("isSuccess", false),
+                        )
                         else -> return
                     }
                     trySend(event)

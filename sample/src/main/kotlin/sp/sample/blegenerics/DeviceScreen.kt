@@ -61,6 +61,11 @@ internal fun DeviceScreen(
                     // todo
                 }
                 is BLEGenerics.Event.OnDisconnect -> onDisconnect()
+                is BLEGenerics.Event.OnPairing -> {
+                    if (!event.isSuccess) {
+                        context.showToast("Pairing failed!")
+                    }
+                }
             }
         }
     }

@@ -36,7 +36,7 @@ class RealBLEGenerics(
     private val default: CoroutineContext,
     private val context: Context,
 ) : BLEGenerics {
-    private sealed interface InternalState {
+    private sealed interface InternalState : Comparable<InternalState?> {
         val ordinal: Int
         val address: String
 
@@ -51,11 +51,21 @@ class RealBLEGenerics(
             val isPaired: Boolean,
             val gatt: BluetoothGatt,
         ) : InternalState {
-            override val ordinal = 10
+            override val ordinal = Ordinal
+
+            companion object : Comparable<InternalState?> {
+                const val Ordinal = 10
+
+                override fun compareTo(other: InternalState?): Int {
+                    if (other == null) return 1
+                    return Ordinal.compareTo(other.ordinal)
+                }
+            }
         }
 
         data class Pairing(
             override val address: String,
+            val gatt: BluetoothGatt,
             val pin: String?,
         ) : InternalState {
             override val ordinal = 11
@@ -88,6 +98,11 @@ class RealBLEGenerics(
             if (newState == null) return true
             return ordinal > newState.ordinal
         }
+
+        override fun compareTo(other: InternalState?): Int {
+            if (other == null) return 1
+            return ordinal.compareTo(other.ordinal)
+        }
     }
 
     private suspend fun toConnected(gatt: BluetoothGatt) {
@@ -104,7 +119,9 @@ class RealBLEGenerics(
             is InternalState.Disconnecting -> onDisconnect(address = address)
             is InternalState.Pairing,
             is InternalState.Connecting,
-            is InternalState.Connected -> onSearching(address = address)
+            is InternalState.Connected -> {
+                _states.value = InternalState.Searching(address = address)
+            }
             else -> {
                 // todo
             }
@@ -167,16 +184,11 @@ class RealBLEGenerics(
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult?) {
             val address = result?.device?.address ?: return
-            println("[RealBLEGenerics]:onScanResult($address)") // todo
+//            println("[RealBLEGenerics]:onScanResult($address)") // todo
             when (val state = _states.value) {
                 is InternalState.Searching -> {
                     if (state.address != address) return
                     connect(address = address)
-                    try {
-                        stopScan()
-                    } catch (error: Throwable) {
-                        TODO("RealBLEGenerics:onScanResult($address)")
-                    }
                 }
                 else -> {
                     // noop
@@ -195,7 +207,7 @@ class RealBLEGenerics(
             is InternalState.Waiting -> {
                 if (!adapter.isEnabled) return
                 if (!isLocationEnabled) return
-                onSearching(address = state.address)
+                _states.value = InternalState.Searching(address = state.address)
             }
             is InternalState.Connecting,
             is InternalState.Connected -> {
@@ -205,11 +217,6 @@ class RealBLEGenerics(
             }
             is InternalState.Searching -> {
                 if (!adapter.isEnabled || !isLocationEnabled) {
-                    try {
-                        stopScan()
-                    } catch (error: Throwable) {
-                        TODO("RealBLEGenerics:fromWaiting(${state.address}):$error")
-                    }
                     _states.value = InternalState.Waiting(address = state.address)
                 }
             }
@@ -247,7 +254,7 @@ class RealBLEGenerics(
 
     private val receiversPairing = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            println("[RealBLEGenerics]:receivers:pairing:(${intent?.action} ${intent?.extras?.keySet()?.toList()})") // todo
+            println("[RealBLEGenerics]:receivers:pairing(${intent?.action} ${intent?.extras?.keySet()?.toList()})") // todo
             if (context == null) return
             if (intent == null) return
             when (intent.action) {
@@ -269,25 +276,131 @@ class RealBLEGenerics(
             }
         }
     }
-    private val intentFiltersPairing = IntentFilter().also {
-        it.addAction(BluetoothDevice.ACTION_PAIRING_REQUEST)
+    private val intentFiltersPairing = IntentFilter(BluetoothDevice.ACTION_PAIRING_REQUEST)
+
+//    private fun getPairingErrorOrNull(reason: Int): PairException.Error? {
+//        val UNBOND_REASON_AUTH_FAILED = 1
+//        val UNBOND_REASON_AUTH_REJECTED = 2
+//        val UNBOND_REASON_AUTH_CANCELED = 3
+//        val UNBOND_REASON_REMOVED = 9
+//        return when (reason) {
+//            UNBOND_REASON_AUTH_FAILED -> PairException.Error.FAILED
+//            UNBOND_REASON_AUTH_REJECTED -> PairException.Error.REJECTED
+//            UNBOND_REASON_AUTH_CANCELED -> PairException.Error.CANCELED
+//            UNBOND_REASON_REMOVED -> PairException.Error.REMOVED
+//            else -> null
+//        }
+//    }
+
+    private val receiversConnected = object : BroadcastReceiver() {
+        private suspend fun onReceive(intent: Intent) {
+            when (intent.action) {
+                BluetoothDevice.ACTION_BOND_STATE_CHANGED -> {
+                    val oldState = intent.getIntExtra(BluetoothDevice.EXTRA_PREVIOUS_BOND_STATE, BluetoothDevice.ERROR)
+                    val newState = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.ERROR)
+                    val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+                        ?: TODO("RealBLEGenerics:receivers:connected($intent):no device!")
+                    when (oldState) {
+                        BluetoothDevice.BOND_NONE -> when (newState) {
+//                            BluetoothDevice.BOND_BONDING -> {
+//                                val state = _states.value ?: TODO("RealBLEGenerics:receivers:connected($intent):no state")
+//                                if (state.address != device.address) return
+//                                if (state !is InternalState.Pairing) TODO("RealBLEGenerics:receivers:connected($intent):state: $state")
+//                            }
+                            BluetoothDevice.BOND_BONDED -> {
+                                val state = _states.value ?: TODO("RealBLEGenerics:receivers:connected($intent):no state")
+                                if (state.address != device.address) return
+                                if (state !is InternalState.Pairing) TODO("RealBLEGenerics:receivers:connected($intent):state: $state")
+                                _states.value = InternalState.Connected(
+                                    address = state.address,
+                                    gatt = state.gatt,
+                                    isPaired = true,
+                                )
+                            }
+                        }
+                        BluetoothDevice.BOND_BONDING -> when (newState) {
+                            BluetoothDevice.BOND_NONE -> {
+                                val state = _states.value ?: TODO("RealBLEGenerics:receivers:connected($intent):no state")
+                                if (state.address != device.address) return
+                                if (state !is InternalState.Pairing) TODO("RealBLEGenerics:receivers:connected($intent):state: $state")
+                                val reasonKey = "android.bluetooth.device.extra.REASON"
+                                val reason = intent.getIntExtra(reasonKey, BluetoothDevice.ERROR) // todo
+                                _states.value = InternalState.Searching(address = state.address)
+                                _events.emit(BLEGenerics.Event.OnPairing(address = state.address, isSuccess = false))
+                            }
+                            BluetoothDevice.BOND_BONDED -> {
+                                val state = _states.value ?: TODO("RealBLEGenerics:receivers:connected($intent):no state")
+                                if (state.address != device.address) return
+                                if (state !is InternalState.Pairing) TODO("RealBLEGenerics:receivers:connected($intent):state: $state")
+                                _states.value = InternalState.Connected(
+                                    address = state.address,
+                                    gatt = state.gatt,
+                                    isPaired = true,
+                                )
+                            }
+                        }
+                        BluetoothDevice.BOND_BONDED -> when (newState) {
+                            BluetoothDevice.BOND_NONE -> TODO("RealBLEGenerics:receivers:connected($intent)")
+                            BluetoothDevice.BOND_BONDING -> TODO("RealBLEGenerics:receivers:connected($intent)")
+                        }
+                    }
+                }
+                BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
+                    TODO("RealBLEGenerics:receivers:connected($intent)")
+                }
+            }
+        }
+
+        override fun onReceive(context: Context?, intent: Intent?) {
+            println("[RealBLEGenerics]:receivers:connected(${intent?.action} ${intent?.extras?.keySet()?.toList()})") // todo
+//            if (context == null) return
+            if (intent == null) return
+            coroutineScope.launch {
+                mutex.withLock {
+                    withContext(default) {
+                        onReceive(intent = intent)
+                    }
+                }
+            }
+        }
+    }
+    private val intentFiltersConnected = IntentFilter().also {
+        it.addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+        it.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
     }
 
     init {
         coroutineScope.launch {
             withContext(default) {
                 _allStates.collect { (oldState, newState) ->
+                    if (InternalState.Connected <= oldState && InternalState.Connected > newState) {
+                        context.unregisterReceiver(receiversConnected)
+                    }
                     when (oldState) {
                         is InternalState.Pairing -> {
                             context.unregisterReceiver(receiversPairing)
-                        }
-                        is InternalState.Connected -> {
-                            if (oldState higher newState) {
+                            if (InternalState.Connected > newState) {
                                 try {
                                     oldState.gatt.close()
                                 } catch (error: Throwable) {
-                                    TODO("RealBLEGenerics:init(${newState?.address}):$error")
+                                    TODO("RealBLEGenerics:init($oldState -> $newState):$error")
                                 }
+                            }
+                        }
+                        is InternalState.Connected -> {
+                            if (InternalState.Connected > newState) {
+                                try {
+                                    oldState.gatt.close()
+                                } catch (error: Throwable) {
+                                    TODO("RealBLEGenerics:init($oldState -> $newState):$error")
+                                }
+                            }
+                        }
+                        is InternalState.Searching -> {
+                            try {
+                                stopScan()
+                            } catch (error: Throwable) {
+                                TODO("RealBLEGenerics:init($oldState -> $newState):stop scan error: $error")
                             }
                         }
                         else -> {
@@ -309,6 +422,17 @@ class RealBLEGenerics(
                                 context.registerReceiver(receivers, intentFilters)
                             }
                         }
+                        is InternalState.Connected -> {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                context.registerReceiver(
+                                    receiversConnected,
+                                    intentFiltersConnected,
+                                    Context.RECEIVER_NOT_EXPORTED,
+                                )
+                            } else {
+                                context.registerReceiver(receiversConnected, intentFiltersConnected)
+                            }
+                        }
                         is InternalState.Pairing -> {
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                                 context.registerReceiver(
@@ -318,6 +442,13 @@ class RealBLEGenerics(
                                 )
                             } else {
                                 context.registerReceiver(receiversPairing, intentFiltersPairing)
+                            }
+                        }
+                        is InternalState.Searching -> {
+                            try {
+                                startScan()
+                            } catch (error: Throwable) {
+                                TODO("RealBLEGenerics:init($oldState -> $newState):start scan error: $error")
                             }
                         }
                         else -> {
@@ -355,16 +486,6 @@ class RealBLEGenerics(
         if (!adapter.isEnabled) return // todo
         val scanner = adapter.bluetoothLeScanner ?: TODO("RealBLEScanner:stopScan:no scanner!")
         scanner.stopScan(scanCallback)
-    }
-
-    private fun onSearching(address: String) {
-        println("[RealBLEGenerics]:onSearching($address)") // todo
-        _states.value = InternalState.Searching(address = address)
-        try {
-            startScan()
-        } catch (error: Throwable) {
-            TODO("RealBLEGenerics:onSearching($address):$error")
-        }
     }
 
     private suspend fun onConnect(gatt: BluetoothGatt) {
@@ -456,14 +577,19 @@ class RealBLEGenerics(
         coroutineScope.launch {
             mutex.withLock {
                 withContext(default) {
-                    when (val state = _states.value) {
+                    val state = _states.value
+                    when (state) {
                         is InternalState.Connected -> {
                             if (state.address != address) TODO("RealBLEGenerics:pair($address):state: $state")
                             if (state.isPaired) TODO("RealBLEGenerics:pair($address):already paired!")
                         }
                         else -> TODO("RealBLEGenerics:pair($address):state: $state")
                     }
-                    _states.value = InternalState.Pairing(address = address, pin = pin)
+                    _states.value = InternalState.Pairing(
+                        address = address,
+                        gatt = state.gatt,
+                        pin = pin,
+                    )
                     try {
                         val bm = context.getSystemService(BluetoothManager::class.java)
                         val adapter = bm.adapter ?: TODO("RealBLEGenerics:pair($address):no adapter!")
