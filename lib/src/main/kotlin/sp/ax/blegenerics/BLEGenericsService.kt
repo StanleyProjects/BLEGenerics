@@ -34,6 +34,7 @@ abstract class BLEGenericsService(
                 is BLEGenerics.State.Searching -> "Searching"
                 is BLEGenerics.State.Waiting -> "Waiting"
                 is BLEGenerics.State.Pairing -> "Pairing"
+                is BLEGenerics.State.Unpairing -> "Unpairing"
             }
             broadcast.putExtra("name", name)
             when (state) {
@@ -111,18 +112,17 @@ abstract class BLEGenericsService(
                 generics.connect(address = address)
             }
             BLEGenericsDisconnectAction -> {
-                val address = intent.getStringExtra("address")
-                if (address.isNullOrBlank()) TODO("DeviceService:onStartCommand($intent)")
-                generics.disconnect(address = address)
+                generics.disconnect()
             }
             BLEGenericsStatesAction -> {
                 sendBroadcast(getBroadcast(generics.states.value))
             }
             BLEGenericsPairAction -> {
-                val address = intent.getStringExtra("address")
-                if (address.isNullOrBlank()) TODO("DeviceService:onStartCommand($intent)")
                 val pin = intent.getStringExtra("pin")
-                generics.pair(address = address, pin = pin)
+                generics.pair(pin = pin)
+            }
+            BLEGenericsUnpairAction -> {
+                generics.unpair()
             }
         }
         return START_NOT_STICKY
@@ -139,5 +139,6 @@ abstract class BLEGenericsService(
         const val BLEGenericsDisconnectAction = "sp.ax.blegenerics.BLEGenericsDisconnectAction"
         const val BLEGenericsEventsAction = "sp.ax.blegenerics.BLEGenericsEventsAction"
         const val BLEGenericsPairAction = "sp.ax.blegenerics.BLEGenericsPairAction"
+        const val BLEGenericsUnpairAction = "sp.ax.blegenerics.BLEGenericsUnpairAction"
     }
 }

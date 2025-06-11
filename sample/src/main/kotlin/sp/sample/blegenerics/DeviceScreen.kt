@@ -2,7 +2,6 @@ package sp.sample.blegenerics
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -29,8 +28,8 @@ import sp.ax.blegenerics.connect
 import sp.ax.blegenerics.disconnect
 import sp.ax.blegenerics.pair
 import sp.ax.blegenerics.states
+import sp.ax.blegenerics.unpair
 import sp.ax.blescanner.BLEDevice
-import sp.ax.jc.clicks.clicks
 
 @Composable
 internal fun DeviceScreen(
@@ -88,22 +87,35 @@ internal fun DeviceScreen(
             BasicText(text = text)
             BasicText(text = "$state")
             Spacer(Modifier.weight(1f)) // todo
-            if (state is BLEGenerics.State.Connected && !state.isPaired) {
-                listOf(
-                    null,
-                    "000000",
-                    "000001",
-                ).forEach { pin ->
+            if (state is BLEGenerics.State.Connected) {
+                if (state.isPaired) {
                     BasicText(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(48.dp)
                             .clickable {
-                                pair<DeviceService>(context = context, address = device.address, pin = pin)
+                                unpair<DeviceService>(context = context)
                             }
                             .wrapContentSize(),
-                        text = "pair: $pin",
+                        text = "unpair",
                     )
+                } else {
+                    listOf(
+                        null,
+                        "000000",
+                        "000001",
+                    ).forEach { pin ->
+                        BasicText(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                                .clickable {
+                                    pair<DeviceService>(context = context, pin = pin)
+                                }
+                                .wrapContentSize(),
+                            text = "pair: $pin",
+                        )
+                    }
                 }
             }
             BasicText(
@@ -111,7 +123,7 @@ internal fun DeviceScreen(
                     .fillMaxWidth()
                     .height(48.dp)
                     .clickable(enabled = enabled) {
-                        disconnect<DeviceService>(context = context, address = device.address)
+                        disconnect<DeviceService>(context = context)
                     }
                     .wrapContentSize(),
                 text = "disconnect",

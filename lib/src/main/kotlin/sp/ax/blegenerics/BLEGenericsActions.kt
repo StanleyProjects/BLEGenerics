@@ -16,17 +16,21 @@ inline fun <reified T : BLEGenericsService> connect(context: Context, address: S
     context.startService(intent)
 }
 
-inline fun <reified T : BLEGenericsService> disconnect(context: Context, address: String) {
+inline fun <reified T : BLEGenericsService> disconnect(context: Context) {
     val intent = Intent(context, T::class.java)
     intent.action = BLEGenericsService.BLEGenericsDisconnectAction
-    intent.putExtra("address", address)
     context.startService(intent)
 }
 
-inline fun <reified T : BLEGenericsService> pair(context: Context, address: String, pin: String?) {
+inline fun <reified T : BLEGenericsService> pair(context: Context, pin: String?) {
     val intent = Intent(context, T::class.java)
     intent.action = BLEGenericsService.BLEGenericsPairAction
-    intent.putExtra("address", address)
     intent.putExtra("pin", pin)
+    context.startService(intent)
+}
+
+inline fun <reified T : BLEGenericsService> unpair(context: Context) {
+    val intent = Intent(context, T::class.java)
+    intent.action = BLEGenericsService.BLEGenericsUnpairAction
     context.startService(intent)
 }

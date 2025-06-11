@@ -30,6 +30,7 @@ object BLEGenericsReceivers {
                             "Waiting" -> BLEGenerics.State.Waiting(address = address)
                             "Disconnecting" -> BLEGenerics.State.Disconnecting(address = address)
                             "Pairing" -> BLEGenerics.State.Pairing(address = address)
+                            "Unpairing" -> BLEGenerics.State.Unpairing(address = address)
                             else -> return
                         }
                         trySend(state)
