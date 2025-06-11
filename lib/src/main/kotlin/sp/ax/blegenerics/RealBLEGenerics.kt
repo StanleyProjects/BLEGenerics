@@ -18,6 +18,7 @@ import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.os.Build
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -29,99 +30,17 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.util.Date
 import kotlin.coroutines.CoroutineContext
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 class RealBLEGenerics(
     private val coroutineScope: CoroutineScope,
     private val default: CoroutineContext,
     private val context: Context,
 ) : BLEGenerics {
-    private sealed interface ConnectedStatus {
-        val ordinal: Int
-
-        data object Idling : ConnectedStatus {
-            override val ordinal = 0
-        }
-        data object Disconnecting : ConnectedStatus {
-            override val ordinal = 1
-        }
-        data object Unpairing : ConnectedStatus {
-            override val ordinal = 2
-        }
-        data class Pairing(val pin: String?) : ConnectedStatus {
-            override val ordinal = 3
-        }
-    }
-
-    private sealed interface InternalState : Comparable<InternalState?> {
-        val ordinal: Int
-        val address: String
-
-        fun isPairing(): Boolean = false
-
-        data class Connecting(
-            override val address: String,
-        ) : InternalState {
-            override val ordinal = 4
-        }
-
-        class Connected(
-            override val address: String,
-            val isPaired: Boolean,
-            val gatt: BluetoothGatt,
-            val status: ConnectedStatus,
-        ) : InternalState {
-            override val ordinal = Ordinal
-
-            fun copy(isPaired: Boolean = this.isPaired, status: ConnectedStatus): Connected {
-                return Connected(
-                    address = address,
-                    isPaired = isPaired,
-                    gatt = gatt,
-                    status = status,
-                )
-            }
-
-            override fun isPairing(): Boolean {
-                return when (status) {
-                    is ConnectedStatus.Pairing,
-                    ConnectedStatus.Unpairing -> true
-                    else -> false
-                }
-            }
-
-            override fun toString(): String {
-                return "Connected(address: $address, isPaired: $isPaired, gatt: ${gatt.hashCode()})"
-            }
-
-            companion object : Comparable<InternalState?> {
-                const val Ordinal = 10
-
-                override fun compareTo(other: InternalState?): Int {
-                    if (other == null) return 1
-                    return Ordinal.compareTo(other.ordinal)
-                }
-            }
-        }
-
-        data class Searching(
-            override val address: String,
-        ) : InternalState {
-            override val ordinal = 2
-        }
-
-        data class Waiting(
-            override val address: String,
-        ) : InternalState {
-            override val ordinal = 1
-        }
-
-        override fun compareTo(other: InternalState?): Int {
-            if (other == null) return 1
-            return ordinal.compareTo(other.ordinal)
-        }
-    }
-
     private suspend fun toConnected(gatt: BluetoothGatt) {
         when (_states.value) {
             is InternalState.Connecting -> onConnect(gatt = gatt)
@@ -222,19 +141,14 @@ class RealBLEGenerics(
         .setReportDelay(0L)
         .build()
     private val scanFilters = listOf(ScanFilter.Builder().build())
-    private val scanCallback = object : ScanCallback() {
-        override fun onScanResult(callbackType: Int, result: ScanResult?) {
-            val address = result?.device?.address ?: return
-//            println("[RealBLEGenerics]:onScanResult($address)") // todo
-            when (val state = _states.value) {
-                is InternalState.Searching -> {
-                    if (state.address != address) return
-                    connect(address = address)
-                }
-                else -> {
-                    // noop
-                }
-            }
+
+    private val scanCallback = object : InternalScanCallback(isEnabled = false) {
+        override fun onScanResult(address: String) {
+            val state = _states.value
+            if (state !is InternalState.Searching) return
+            if (state.address != address) return
+            isEnabled = false
+            connecting(address = address)
         }
     }
 
@@ -420,9 +334,35 @@ class RealBLEGenerics(
                     } else if (oldState is InternalState.Connected && oldState.isPairing() && newState?.isPairing() != true) {
                         context.unregisterReceiver(receiversPairing)
                     }
-                    if (oldState !is InternalState.Connected && newState is InternalState.Connected) {
+                    if (newState is InternalState.Connecting && newState > oldState) {
+                        launch(default) {
+                            val timeMax = 8.seconds
+                            val timeDelay = 250.milliseconds
+                            val timeStart = now()
+                            println("[RealBLEGenerics]:connecting:start: ${Date(timeStart.inWholeMilliseconds)}") // todo
+                            while (true) {
+                                val state = _states.value
+                                if (state !is InternalState.Connecting) break
+                                val timeDiff = now() - timeStart
+                                if (timeDiff > timeMax) {
+                                    println("[RealBLEGenerics]:connecting:timeout: $timeDiff") // todo
+                                    _states.value = InternalState.Searching(address = state.address)
+                                    break
+                                }
+                                delay(timeDelay)
+                            }
+                        }
+                    } else if (oldState is InternalState.Connecting && oldState > newState) {
+                        println("[RealBLEGenerics]:connecting:close:gatt: ${oldState.gatt.hashCode()}") // todo
+                        try {
+                            oldState.gatt.close()
+                        } catch (error: Throwable) {
+                            TODO("RealBLEGenerics:init($oldState -> $newState):$error")
+                        }
+                    }
+                    if (newState is InternalState.Connected && newState > oldState) {
                         BLEGenericsReceivers.register(context, receiversConnected, intentFiltersConnected)
-                    } else if (oldState is InternalState.Connected && newState !is InternalState.Connected) {
+                    } else if (oldState is InternalState.Connected && oldState > newState) {
                         context.unregisterReceiver(receiversConnected)
                         try {
                             oldState.gatt.close()
@@ -448,6 +388,10 @@ class RealBLEGenerics(
         }
     }
 
+    private fun now(): Duration {
+        return System.currentTimeMillis().milliseconds
+    }
+
     private fun startScan() {
         println("[RealBLEGenerics]:start scan...") // todo
         val bm = context.getSystemService(BluetoothManager::class.java)
@@ -464,11 +408,13 @@ class RealBLEGenerics(
             }
         }
         val scanner = adapter.bluetoothLeScanner ?: TODO("RealBLEGenerics:startScan:no scanner!")
+        scanCallback.isEnabled = true
         scanner.startScan(scanFilters, scanSettings, scanCallback)
     }
 
     private fun stopScan() {
         println("[RealBLEGenerics]:stop scan...") // todo
+        scanCallback.isEnabled = false
         val bm = context.getSystemService(BluetoothManager::class.java)
         val adapter = bm.adapter ?: TODO("RealBLEScanner:stopScan:no adapter!")
         if (!adapter.isEnabled) return // todo
@@ -494,7 +440,7 @@ class RealBLEGenerics(
         _events.emit(BLEGenerics.Event.OnDisconnect(address = address))
     }
 
-    private fun connectGatt(address: String) {
+    private fun connectGatt(address: String): BluetoothGatt {
         println("[RealBLEGenerics]:connectGatt($address)") // todo
         val bm = context.getSystemService(BluetoothManager::class.java)
         val adapter = bm.adapter ?: TODO("RealBLEGenerics:connectGatt($address):no adapter!")
@@ -504,30 +450,26 @@ class RealBLEGenerics(
         val autoConnect = false
         val transport = BluetoothDevice.TRANSPORT_LE
         val device = adapter.getRemoteDevice(address) ?: TODO("RealBLEGenerics:connectGatt($address):no device!")
-        device.connectGatt(context, autoConnect, gattCallback, transport)
+        return device.connectGatt(context, autoConnect, gattCallback, transport) ?: TODO("RealBLEGenerics:connectGatt($address):no gatt!")
+    }
+
+    private fun connecting(address: String) {
+        _states.value = try {
+            InternalState.Connecting(address = address, gatt = connectGatt(address = address))
+        } catch (error: BLEGenericsException) {
+            InternalState.Waiting(address = address)
+        } catch (error: Throwable) {
+            TODO("RealBLEGenerics:connect($address):$error")
+        }
     }
 
     override fun connect(address: String) {
         coroutineScope.launch {
             mutex.withLock {
                 withContext(default) {
-                    when (val state = _states.value) {
-                        is InternalState.Searching -> {
-                            if (state.address != address) TODO("RealBLEGenerics:connect($address):state: $state")
-                        }
-                        null -> {
-                            // noop
-                        }
-                        else -> TODO("RealBLEGenerics:connect($address):state: $state")
-                    }
-                    _states.value = InternalState.Connecting(address = address)
-                    try {
-                        connectGatt(address = address)
-                    } catch (error: BLEGenericsException) {
-                        _states.value = InternalState.Waiting(address = address)
-                    } catch (error: Throwable) {
-                        TODO("RealBLEGenerics:connect($address):$error")
-                    }
+                    val state = _states.value
+                    if (state != null) TODO("RealBLEGenerics:connect($address):state: $state")
+                    connecting(address = address)
                 }
             }
         }
