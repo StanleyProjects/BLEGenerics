@@ -142,8 +142,9 @@ class RealBLEGenerics(
         .build()
     private val scanFilters = listOf(ScanFilter.Builder().build())
 
-    private val scanCallback = object : InternalScanCallback(isEnabled = false) {
+    private val scanCallback = object : InternalScanCallback() {
         override fun onScanResult(address: String) {
+            timeLastResult = now()
             val state = _states.value
             if (state !is InternalState.Searching) return
             if (state.address != address) return
@@ -152,26 +153,29 @@ class RealBLEGenerics(
         }
     }
 
-    private fun fromWaiting() {
-        val bm = context.getSystemService(BluetoothManager::class.java)
-        val adapter = bm.adapter ?: TODO("RealBLEGenerics:fromWaiting:no adapter!")
-        val lm = context.getSystemService(LocationManager::class.java)
-        val isLocationEnabled = lm.isProviderEnabled(LocationManager.GPS_PROVIDER)
-        println("[RealBLEGenerics]:fromWaiting(${adapter.isEnabled}, $isLocationEnabled)") // todo
+    private fun checkManagers(
+        isBluetoothEnabled: Boolean = context.getSystemService(BluetoothManager::class.java)
+            .adapter
+            ?.isEnabled
+            ?: false,
+        isLocationEnabled: Boolean = context.getSystemService(LocationManager::class.java)
+            .isProviderEnabled(LocationManager.GPS_PROVIDER),
+    ) {
+        println("[RealBLEGenerics]:checkManagers($isBluetoothEnabled, $isLocationEnabled)") // todo
         when (val state = _states.value) {
             is InternalState.Waiting -> {
-                if (!adapter.isEnabled) return
-                if (!isLocationEnabled) return
-                _states.value = InternalState.Searching(address = state.address)
+                if (isBluetoothEnabled && isLocationEnabled) {
+                    _states.value = InternalState.Searching(address = state.address)
+                }
             }
             is InternalState.Connecting,
             is InternalState.Connected -> {
-                if (!adapter.isEnabled || !isLocationEnabled) {
+                if (!isBluetoothEnabled || !isLocationEnabled) {
                     _states.value = InternalState.Waiting(address = state.address)
                 }
             }
             is InternalState.Searching -> {
-                if (!adapter.isEnabled || !isLocationEnabled) {
+                if (!isBluetoothEnabled || !isLocationEnabled) {
                     _states.value = InternalState.Waiting(address = state.address)
                 }
             }
@@ -190,14 +194,15 @@ class RealBLEGenerics(
                 BluetoothAdapter.ACTION_STATE_CHANGED -> {
                     val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
                     when (state) {
-                        BluetoothAdapter.STATE_ON -> fromWaiting()
-                        BluetoothAdapter.STATE_TURNING_OFF -> fromWaiting()
+                        BluetoothAdapter.STATE_ON -> checkManagers(isBluetoothEnabled = true)
+                        BluetoothAdapter.STATE_TURNING_OFF -> checkManagers(isBluetoothEnabled = false)
                     }
                 }
                 LocationManager.PROVIDERS_CHANGED_ACTION -> {
                     val name = intent.getStringExtra(LocationManager.EXTRA_PROVIDER_NAME)
                     if (name != LocationManager.GPS_PROVIDER) return
-                    fromWaiting()
+                    val isLocationEnabled = intent.getBooleanExtra(LocationManager.EXTRA_PROVIDER_ENABLED, false)
+                    checkManagers(isLocationEnabled = isLocationEnabled)
                 }
             }
         }
@@ -336,7 +341,7 @@ class RealBLEGenerics(
                     }
                     if (newState is InternalState.Connecting && newState > oldState) {
                         launch(default) {
-                            val timeMax = 8.seconds
+                            val timeMax = 4.seconds
                             val timeDelay = 250.milliseconds
                             val timeStart = now()
                             println("[RealBLEGenerics]:connecting:start: ${Date(timeStart.inWholeMilliseconds)}") // todo
@@ -376,12 +381,35 @@ class RealBLEGenerics(
                         } catch (error: Throwable) {
                             TODO("RealBLEGenerics:init($oldState -> $newState):start scan error: $error")
                         }
+                        launch(default) {
+                            val timeDelay = 250.milliseconds
+                            println("[RealBLEGenerics]:searching:start: ${Date()}") // todo
+                            while (true) {
+                                val state = _states.value
+                                if (state !is InternalState.Searching) break
+                                val timeNow = now()
+                                val fromStart = timeNow - scanCallback.timeStart
+                                val fromLast = timeNow - scanCallback.timeLastResult
+                                if (fromStart > 16.seconds || fromLast > 4.seconds) {
+                                    println("[RealBLEGenerics]:searching:timeout...") // todo
+                                    _states.value = InternalState.Waiting(address = state.address)
+                                    break
+                                }
+                                delay(timeDelay)
+                            }
+                        }
                     } else if (oldState is InternalState.Searching && newState !is InternalState.Searching) {
                         try {
                             stopScan()
                         } catch (error: Throwable) {
                             TODO("RealBLEGenerics:init($oldState -> $newState):stop scan error: $error")
                         }
+                        launch(default) {
+
+                        }
+                    }
+                    if (oldState !is InternalState.Waiting && newState is InternalState.Waiting) {
+                        checkManagers()
                     }
                 }
             }
@@ -409,6 +437,8 @@ class RealBLEGenerics(
         }
         val scanner = adapter.bluetoothLeScanner ?: TODO("RealBLEGenerics:startScan:no scanner!")
         scanCallback.isEnabled = true
+        scanCallback.timeStart = now()
+        scanCallback.timeLastResult = now()
         scanner.startScan(scanFilters, scanSettings, scanCallback)
     }
 
