@@ -358,7 +358,13 @@ class RealBLEGenerics(
                             val state = _states.value ?: TODO("RealBLEGenerics:receivers:connected($intent):no state")
                             if (state.address != device.address) return
                             if (state !is InternalState.Connected) TODO("RealBLEGenerics:receivers:connected($intent):state: $state")
-                            if (state.status !is ConnectedStatus.Pairing) TODO("RealBLEGenerics:receivers:connected($intent):state: $state")
+                            when (state.status) {
+                                ConnectedStatus.Idling -> if (state.isPaired) return
+                                is ConnectedStatus.Pairing -> {
+                                    // noop
+                                }
+                                else -> TODO("RealBLEGenerics:receivers:connected($intent):state: $state")
+                            }
                             _states.value = state.copy(
                                 isPaired = true,
                                 status = ConnectedStatus.Idling,
