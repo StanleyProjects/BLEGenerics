@@ -223,7 +223,9 @@ class RealBLEGenerics(
     }
 
     private val receiversPairing = object : BroadcastReceiver() {
-        private suspend fun onReceive(intent: Intent) {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            logger.info("receivers pairing ${intent?.action} ${intent?.extras?.keySet()?.toList()}")
+            if (intent == null) return
             when (intent.action) {
                 BluetoothDevice.ACTION_PAIRING_REQUEST -> {
                     val variant = intent.getIntExtra(BluetoothDevice.EXTRA_PAIRING_VARIANT, BluetoothDevice.ERROR)
@@ -244,20 +246,11 @@ class RealBLEGenerics(
                 }
             }
         }
-
-        override fun onReceive(context: Context?, intent: Intent?) {
-            logger.info("receivers pairing ${intent?.action} ${intent?.extras?.keySet()?.toList()}")
-            if (intent == null) return
-            coroutineScope.launch {
-                mutex.withLock {
-                    withContext(default) {
-                        onReceive(intent = intent)
-                    }
-                }
-            }
-        }
     }
-    private val intentFiltersPairing = IntentFilter(BluetoothDevice.ACTION_PAIRING_REQUEST)
+    private val intentFiltersPairing = IntentFilter().also {
+        it.priority = IntentFilter.SYSTEM_HIGH_PRIORITY
+        it.addAction(BluetoothDevice.ACTION_PAIRING_REQUEST)
+    }
 
 //    private fun getPairingErrorOrNull(reason: Int): PairException.Error? {
 //        val UNBOND_REASON_AUTH_FAILED = 1
@@ -392,6 +385,20 @@ class RealBLEGenerics(
         }
     }
 
+    private fun onPairing(address: String) {
+        val bm = context.getSystemService(BluetoothManager::class.java)
+        val adapter = bm.adapter ?: TODO("RealBLEGenerics:pair($address):no adapter!")
+        val device = adapter.getRemoteDevice(address) ?: TODO("RealBLEGenerics:pair($address):no device!")
+        when (val bondState = device.bondState) {
+            BluetoothDevice.BOND_NONE -> {
+                if (!device.createBond()) TODO("RealBLEGenerics:pair($address):create bond error!")
+            }
+            BluetoothDevice.BOND_BONDING -> TODO("RealBLEGenerics:pair($address):bond state $bondState")
+            BluetoothDevice.BOND_BONDED -> TODO("RealBLEGenerics:pair($address):already bonded!")
+            else -> TODO("RealBLEGenerics:pair($address):bond state $bondState is not supported!")
+        }
+    }
+
     init {
         coroutineScope.launch {
             withContext(default) {
@@ -402,9 +409,16 @@ class RealBLEGenerics(
                     } else if (oldState != null && newState == null) {
                         context.unregisterReceiver(receivers)
                     }
-                    if (newState is InternalState.Connected && newState.isPairing() && oldState?.isPairing() != true) {
-                        BLEGenericsReceivers.register(context, receiversPairing, intentFiltersPairing)
-                    } else if (oldState is InternalState.Connected && oldState.isPairing() && newState?.isPairing() != true) {
+                    if (newState is InternalState.Connected && newState.status is ConnectedStatus.Pairing) {
+                        if (oldState !is InternalState.Connected || oldState.status !is ConnectedStatus.Pairing) {
+                            BLEGenericsReceivers.register(context, receiversPairing, intentFiltersPairing)
+                            try {
+                                onPairing(address = newState.address)
+                            } catch (error: Throwable) {
+                                TODO("RealBLEGenerics:pair(${newState.address}):$error")
+                            }
+                        }
+                    } else if (oldState is InternalState.Connected && oldState.status is ConnectedStatus.Pairing) {
                         context.unregisterReceiver(receiversPairing)
                     }
                     if (newState is InternalState.Connecting && newState > oldState) {
@@ -617,21 +631,6 @@ class RealBLEGenerics(
                     logger.debug("pair $address pin: $pin")
                     if (state.isPaired) TODO("RealBLEGenerics:pair($address):already paired!")
                     _states.value = state.copy(status = ConnectedStatus.Pairing(pin = pin))
-                    try {
-                        val bm = context.getSystemService(BluetoothManager::class.java)
-                        val adapter = bm.adapter ?: TODO("RealBLEGenerics:pair($address):no adapter!")
-                        val device = adapter.getRemoteDevice(address) ?: TODO("RealBLEGenerics:pair($address):no device!")
-                        when (val bondState = device.bondState) {
-                            BluetoothDevice.BOND_NONE -> {
-                                if (!device.createBond()) TODO("RealBLEGenerics:pair($address):create bond error!")
-                            }
-                            BluetoothDevice.BOND_BONDING -> TODO("RealBLEGenerics:pair($address):bond state $bondState")
-                            BluetoothDevice.BOND_BONDED -> TODO("RealBLEGenerics:pair($address):already bonded!")
-                            else -> TODO("RealBLEGenerics:pair($address):bond state $bondState is not supported!")
-                        }
-                    } catch (error: Throwable) {
-                        TODO("RealBLEGenerics:pair($address):$error")
-                    }
                 }
             }
         }

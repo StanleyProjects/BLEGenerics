@@ -6,8 +6,6 @@ internal sealed interface InternalState : Comparable<InternalState?> {
     val ordinal: Int
     val address: String
 
-    fun isPairing(): Boolean = false
-
     class Connecting(
         override val address: String,
         val gatt: BluetoothGatt,
@@ -34,14 +32,6 @@ internal sealed interface InternalState : Comparable<InternalState?> {
                 gatt = gatt,
                 status = status,
             )
-        }
-
-        override fun isPairing(): Boolean {
-            return when (status) {
-                is ConnectedStatus.Pairing,
-                ConnectedStatus.Unpairing -> true
-                else -> false
-            }
         }
 
         override fun toString(): String {
