@@ -1,6 +1,6 @@
 package sp.ax.blegenerics
 
-internal sealed interface ConnectedStatus  : Comparable<ConnectedStatus> {
+internal sealed interface ConnectedStatus : Comparable<ConnectedStatus> {
     val ordinal: Int
 
     data object Disconnecting : ConnectedStatus {

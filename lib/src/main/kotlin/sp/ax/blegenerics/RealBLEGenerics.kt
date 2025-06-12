@@ -58,8 +58,7 @@ class RealBLEGenerics(
                     ConnectedStatus.Disconnecting -> {
                         onDisconnect(address = address)
                     }
-                    ConnectedStatus.Idling,
-                    is ConnectedStatus.Pairing -> {
+                    ConnectedStatus.Idling, is ConnectedStatus.Pairing -> {
                         _states.value = InternalState.Searching(address = address)
                     }
                     else -> {
@@ -159,8 +158,7 @@ class RealBLEGenerics(
                     _states.value = InternalState.Searching(address = state.address)
                 }
             }
-            is InternalState.Connecting,
-            is InternalState.Connected -> {
+            is InternalState.Connecting, is InternalState.Connected -> {
                 if (!isBluetoothEnabled || !isLocationEnabled) {
                     _states.value = InternalState.Waiting(address = state.address)
                 }
@@ -478,9 +476,6 @@ class RealBLEGenerics(
                         } catch (error: Throwable) {
                             TODO("RealBLEGenerics:init($oldState -> $newState):stop scan error: $error")
                         }
-                        launch(default) {
-
-                        }
                     }
                     if (oldState !is InternalState.Waiting && newState is InternalState.Waiting) {
                         checkManagers()
@@ -602,8 +597,7 @@ class RealBLEGenerics(
                                 TODO("RealBLEGenerics:disconnect($address):$error")
                             }
                         }
-                        is InternalState.Searching,
-                        is InternalState.Waiting -> {
+                        is InternalState.Searching, is InternalState.Waiting -> {
                             onDisconnect(address = state.address)
                         }
                         else -> TODO("RealBLEGenerics:disconnect:state: $state")
