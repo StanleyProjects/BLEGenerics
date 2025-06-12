@@ -18,12 +18,12 @@ object BLEGenericsReceivers {
                     if (address == null) {
                         trySend(null)
                     } else {
-                        val state = when (intent.getStringExtra("name")) {
+                        val state = when (intent.getStringExtra("state")) {
                             "Connecting" -> BLEGenerics.State.Connecting(address = address)
                             "Connected" -> {
                                 BLEGenerics.State.Connected(
                                     address = address,
-                                    isPaired = intent.getBooleanExtra("isPaired", false)
+                                    isPaired = intent.getBooleanExtra("isPaired", false),
                                 )
                             }
                             "Searching" -> BLEGenerics.State.Searching(address = address)
@@ -53,7 +53,7 @@ object BLEGenericsReceivers {
             val receivers = object : BroadcastReceiver() {
                 override fun onReceive(context: Context?, intent: Intent?) {
                     val address = intent?.getStringExtra("address") ?: return
-                    val event = when (intent.getStringExtra("name")) {
+                    val event = when (intent.getStringExtra("event")) {
                         "OnConnect" -> BLEGenerics.Event.OnConnect(address = address)
                         "OnDisconnect" -> BLEGenerics.Event.OnDisconnect(address = address)
                         "OnPairing" -> BLEGenerics.Event.OnPairing(
@@ -91,4 +91,52 @@ object BLEGenericsReceivers {
             context.registerReceiver(receivers, filters)
         }
     }
+}
+
+internal fun Context.getBroadcast(state: BLEGenerics.State?): Intent {
+    val broadcast = Intent(BLEGenericsService.BLEGenericsStatesAction)
+    broadcast.setPackage(packageName) // https://stackoverflow.com/a/76920719/4398606
+    broadcast.putExtra("address", state?.address)
+    if (state != null) {
+        val value = when (state) {
+            is BLEGenerics.State.Connected -> "Connected"
+            is BLEGenerics.State.Connecting -> "Connecting"
+            is BLEGenerics.State.Disconnecting -> "Disconnecting"
+            is BLEGenerics.State.Searching -> "Searching"
+            is BLEGenerics.State.Waiting -> "Waiting"
+            is BLEGenerics.State.Pairing -> "Pairing"
+            is BLEGenerics.State.Unpairing -> "Unpairing"
+        }
+        broadcast.putExtra("state", value)
+        when (state) {
+            is BLEGenerics.State.Connected -> {
+                broadcast.putExtra("isPaired", state.isPaired)
+            }
+            else -> {
+                // noop
+            }
+        }
+    }
+    return broadcast
+}
+
+internal fun Context.getBroadcast(event: BLEGenerics.Event): Intent {
+    val broadcast = Intent(BLEGenericsService.BLEGenericsEventsAction)
+    broadcast.setPackage(packageName) // https://stackoverflow.com/a/76920719/4398606
+    broadcast.putExtra("address", event.address)
+    val value = when (event) {
+        is BLEGenerics.Event.OnConnect -> "OnConnect"
+        is BLEGenerics.Event.OnDisconnect -> "OnDisconnect"
+        is BLEGenerics.Event.OnPairing -> "OnPairing"
+    }
+    broadcast.putExtra("event", value)
+    when (event) {
+        is BLEGenerics.Event.OnPairing -> {
+            broadcast.putExtra("isSuccess", event.isSuccess)
+        }
+        else -> {
+            // noop
+        }
+    }
+    return broadcast
 }

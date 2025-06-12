@@ -22,54 +22,6 @@ abstract class BLEGenericsService(
     private val coroutineScope = CoroutineScope(main + job)
     private val N_ID: Int = System.currentTimeMillis().toInt()
 
-    private fun getBroadcast(state: BLEGenerics.State?): Intent {
-        val broadcast = Intent(BLEGenericsStatesAction)
-        broadcast.setPackage(packageName) // https://stackoverflow.com/a/76920719/4398606
-        broadcast.putExtra("address", state?.address)
-        if (state != null) {
-            val name = when (state) {
-                is BLEGenerics.State.Connected -> "Connected"
-                is BLEGenerics.State.Connecting -> "Connecting"
-                is BLEGenerics.State.Disconnecting -> "Disconnecting"
-                is BLEGenerics.State.Searching -> "Searching"
-                is BLEGenerics.State.Waiting -> "Waiting"
-                is BLEGenerics.State.Pairing -> "Pairing"
-                is BLEGenerics.State.Unpairing -> "Unpairing"
-            }
-            broadcast.putExtra("name", name)
-            when (state) {
-                is BLEGenerics.State.Connected -> {
-                    broadcast.putExtra("isPaired", state.isPaired)
-                }
-                else -> {
-                    // noop
-                }
-            }
-        }
-        return broadcast
-    }
-
-    private fun getBroadcast(event: BLEGenerics.Event): Intent {
-        val broadcast = Intent(BLEGenericsEventsAction)
-        broadcast.setPackage(packageName) // https://stackoverflow.com/a/76920719/4398606
-        broadcast.putExtra("address", event.address)
-        val name = when (event) {
-            is BLEGenerics.Event.OnConnect -> "OnConnect"
-            is BLEGenerics.Event.OnDisconnect -> "OnDisconnect"
-            is BLEGenerics.Event.OnPairing -> "OnPairing"
-        }
-        broadcast.putExtra("name", name)
-        when (event) {
-            is BLEGenerics.Event.OnPairing -> {
-                broadcast.putExtra("isSuccess", event.isSuccess)
-            }
-            else -> {
-                // noop
-            }
-        }
-        return broadcast
-    }
-
     protected abstract fun onStateNotification(channel: NotificationChannel, state: BLEGenerics.State?): Notification
 
     override fun onCreate() {
