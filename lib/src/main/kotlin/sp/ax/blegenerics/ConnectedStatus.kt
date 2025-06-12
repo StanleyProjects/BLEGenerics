@@ -1,18 +1,25 @@
 package sp.ax.blegenerics
 
-internal sealed interface ConnectedStatus {
+internal sealed interface ConnectedStatus  : Comparable<ConnectedStatus> {
     val ordinal: Int
 
-    data object Idling : ConnectedStatus {
+    data object Disconnecting : ConnectedStatus {
         override val ordinal = 2
     }
-    data object Disconnecting : ConnectedStatus {
+
+    data object Unpairing : ConnectedStatus {
         override val ordinal = 4
     }
-    data object Unpairing : ConnectedStatus {
-        override val ordinal = 6
-    }
-    data class Pairing(val pin: String?) : ConnectedStatus {
+
+    data object Idling : ConnectedStatus {
         override val ordinal = 8
+    }
+
+    data class Pairing(val pin: String?) : ConnectedStatus {
+        override val ordinal = 16
+    }
+
+    override fun compareTo(other: ConnectedStatus): Int {
+        return ordinal.compareTo(other.ordinal)
     }
 }

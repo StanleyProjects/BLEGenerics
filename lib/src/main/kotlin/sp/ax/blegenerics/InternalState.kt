@@ -45,7 +45,7 @@ internal sealed interface InternalState : Comparable<InternalState?> {
         }
 
         override fun toString(): String {
-            return "Connected(address: $address, isPaired: $isPaired, gatt: ${gatt.hashCode()})"
+            return "Connected(address: $address, isPaired: $isPaired, gatt: ${gatt.hashCode()}, status: $status)"
         }
 
         companion object : Comparable<InternalState?> {

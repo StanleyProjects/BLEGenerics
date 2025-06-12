@@ -5,6 +5,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import sp.ax.blegenerics.BLEGenerics
+import sp.ax.blegenerics.BLEGenericsLogger
 import sp.ax.blegenerics.RealBLEGenerics
 import sp.ax.blescanner.BLEScanner
 import sp.ax.blescanner.RealBLEScanner
@@ -24,6 +25,10 @@ internal class App : Application() {
             coroutineScope = CoroutineScope(Dispatchers.Main + job),
             default = Dispatchers.Default,
             context = this,
+            logger = FinalBLEGenericsLogger(
+                tag = "[BLEGenerics]",
+                level = BLEGenericsLogger.Level.Info,
+            ),
         )
         _locals = FinalLocals(context = this)
     }
