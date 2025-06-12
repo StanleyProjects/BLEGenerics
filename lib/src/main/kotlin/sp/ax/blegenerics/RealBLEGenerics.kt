@@ -6,9 +6,7 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothManager
-import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
-import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -24,7 +22,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -96,13 +93,6 @@ class RealBLEGenerics(
     }
 
     private val _states = MutableStateFlow<InternalState?>(null)
-
-    private val _allStates = _states.runningFold<InternalState?, Pair<InternalState?, InternalState?>>(
-        initial = null to null,
-    ) { (_, oldState), newState ->
-        oldState to newState
-    }
-
     override val states = _states.map { state ->
         when (state) {
             is InternalState.Connected -> {
@@ -402,7 +392,10 @@ class RealBLEGenerics(
     init {
         coroutineScope.launch {
             withContext(default) {
-                _allStates.collect { (oldState, newState) ->
+                var state: InternalState? = null
+                _states.collect { newState ->
+                    val oldState = state
+                    state = newState
                     onStates(oldState = oldState, newState = newState)
                     if (oldState == null && newState != null) {
                         BLEGenericsReceivers.register(context, receivers, intentFilters)
