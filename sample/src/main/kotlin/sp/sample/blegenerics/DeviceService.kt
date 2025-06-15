@@ -27,6 +27,7 @@ internal class DeviceService : BLEGenericsService(
             .setContentText("$state")
             .setAutoCancel(false)
             .setOngoing(false)
+            .setSilent(true)
         when (state) {
             is BLEGenerics.State.Connected,
             is BLEGenerics.State.Searching,
@@ -41,6 +42,17 @@ internal class DeviceService : BLEGenericsService(
             }
             else -> {
                 // noop
+            }
+        }
+        if (state is BLEGenerics.State.Connected) {
+            if (state.isPaired) {
+                val intent = Intent(context, DeviceService::class.java)
+                intent.action = BLEGenericsUnpairAction
+                intent.putExtra("address", state.address)
+                val stopIntent = PendingIntent.getService(context, 1, intent, PendingIntent.FLAG_IMMUTABLE)
+                val action = NotificationCompat.Action.Builder(-1, "unpair", stopIntent)
+                    .build()
+                builder.addAction(action)
             }
         }
         return builder.build()

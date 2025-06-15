@@ -1,5 +1,6 @@
 package sp.sample.blegenerics
 
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -24,6 +25,9 @@ import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.flow.take
 import sp.ax.blegenerics.BLEGenerics
 import sp.ax.blegenerics.BLEGenericsReceivers
+import sp.ax.blegenerics.BLEGenericsService
+import sp.ax.blegenerics.BLEProfiles
+import sp.ax.blegenerics.BLEProfilesReceivers
 import sp.ax.blegenerics.connect
 import sp.ax.blegenerics.disconnect
 import sp.ax.blegenerics.pair
@@ -68,6 +72,15 @@ internal fun DeviceScreen(
             }
         }
     }
+    LaunchedEffect(Unit) {
+        BLEProfilesReceivers.events(context = context).collect { event ->
+            when (event) {
+                BLEProfiles.Event.OnServices -> {
+                    context.showToast("on services discovered")
+                }
+            }
+        }
+    }
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -94,28 +107,35 @@ internal fun DeviceScreen(
                             .fillMaxWidth()
                             .height(48.dp)
                             .clickable {
+                                val intent = Intent(context, DeviceService::class.java)
+                                intent.action = BLEGenericsService.BLEProfilesServicesAction
+                                context.startService(intent)
+                            }
+                            .wrapContentSize(),
+                        text = "services",
+                    )
+                    BasicText(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .clickable {
                                 unpair<DeviceService>(context = context)
                             }
                             .wrapContentSize(),
                         text = "unpair",
                     )
                 } else {
-                    listOf(
-                        null,
-                        "000000",
-                        "000001",
-                    ).forEach { pin ->
-                        BasicText(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp)
-                                .clickable {
-                                    pair<DeviceService>(context = context, pin = pin)
-                                }
-                                .wrapContentSize(),
-                            text = "pair: $pin",
-                        )
-                    }
+                    val pin = "000000"
+                    BasicText(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .clickable {
+                                pair<DeviceService>(context = context, pin = pin)
+                            }
+                            .wrapContentSize(),
+                        text = "pair: $pin",
+                    )
                 }
             }
             BasicText(

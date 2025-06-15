@@ -98,6 +98,9 @@ class RealBLEGenerics(
                         BluetoothGatt.GATT_SUCCESS -> {
                             _profiles.events.emit(BLEProfiles.Event.OnServices)
                         }
+                        else -> {
+                            logger.warning("on services discovered: ${gatt.hashCode()} [ status: $status ]")
+                        }
                     }
                 }
             }
@@ -352,6 +355,7 @@ class RealBLEGenerics(
                         when (state) {
                             is InternalState.Connected -> {
                                 if (state.status !is ConnectedStatus.Idling) TODO("RealBLEGenerics:profiles:services:state: $state")
+                                if (!state.isPaired) TODO("RealBLEGenerics:profiles:services:state: $state")
                                 if (!state.gatt.discoverServices()) TODO("RealBLEGenerics:profiles:services:discover services error!")
                             }
                             else -> TODO("RealBLEGenerics:profiles:services:state: $state")
@@ -432,13 +436,13 @@ class RealBLEGenerics(
                     state = newState
                     onStates(oldState = oldState, newState = newState)
                     if (oldState == null && newState != null) {
-                        BLEGenericsReceivers.register(context, receivers, intentFilters)
+                        register(context, receivers, intentFilters)
                     } else if (oldState != null && newState == null) {
                         context.unregisterReceiver(receivers)
                     }
                     if (newState is InternalState.Connected && newState.status is ConnectedStatus.Pairing) {
                         if (oldState !is InternalState.Connected || oldState.status !is ConnectedStatus.Pairing) {
-                            BLEGenericsReceivers.register(context, receiversPairing, intentFiltersPairing)
+                            register(context, receiversPairing, intentFiltersPairing)
                             try {
                                 onPairing(address = newState.address)
                             } catch (error: Throwable) {
@@ -474,7 +478,7 @@ class RealBLEGenerics(
                         }
                     }
                     if (newState is InternalState.Connected && newState > oldState) {
-                        BLEGenericsReceivers.register(context, receiversConnected, intentFiltersConnected)
+                        register(context, receiversConnected, intentFiltersConnected)
                     } else if (oldState is InternalState.Connected && oldState > newState) {
                         context.unregisterReceiver(receiversConnected)
                         try {

@@ -49,6 +49,11 @@ abstract class BLEGenericsService(
                 sendBroadcast(getBroadcast(event = event))
             }
         }
+        coroutineScope.launch {
+            generics.profiles.events.collect { event ->
+                sendBroadcast(getBroadcast(event = event))
+            }
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? {
@@ -76,6 +81,9 @@ abstract class BLEGenericsService(
             BLEGenericsUnpairAction -> {
                 generics.unpair()
             }
+            BLEProfilesServicesAction -> {
+                generics.profiles.services()
+            }
         }
         return START_NOT_STICKY
     }
@@ -92,5 +100,7 @@ abstract class BLEGenericsService(
         const val BLEGenericsEventsAction = "sp.ax.blegenerics.BLEGenericsEventsAction"
         const val BLEGenericsPairAction = "sp.ax.blegenerics.BLEGenericsPairAction"
         const val BLEGenericsUnpairAction = "sp.ax.blegenerics.BLEGenericsUnpairAction"
+        const val BLEProfilesEventsAction = "sp.ax.blegenerics.BLEProfilesEventsAction"
+        const val BLEProfilesServicesAction = "sp.ax.blegenerics.BLEProfilesServicesAction"
     }
 }
