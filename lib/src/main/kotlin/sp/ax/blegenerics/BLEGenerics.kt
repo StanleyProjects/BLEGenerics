@@ -26,6 +26,7 @@ interface BLEGenerics {
 
     val states: StateFlow<State?>
     val events: SharedFlow<Event>
+    val profiles: BLEProfiles
 
     fun connect(address: String)
     fun disconnect()

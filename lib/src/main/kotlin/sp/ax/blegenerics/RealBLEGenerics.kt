@@ -19,6 +19,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.map
@@ -85,6 +86,18 @@ class RealBLEGenerics(
                     when (newState) {
                         BluetoothGatt.STATE_CONNECTED -> toConnected(gatt = gatt)
                         BluetoothGatt.STATE_DISCONNECTED -> toDisconnected(address = gatt.device.address)
+                    }
+                }
+            }
+        }
+
+        override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
+            coroutineScope.launch {
+                mutex.withLock {
+                    when (status) {
+                        BluetoothGatt.GATT_SUCCESS -> {
+                            _profiles.events.emit(BLEProfiles.Event.OnServices)
+                        }
                     }
                 }
             }
@@ -326,6 +339,29 @@ class RealBLEGenerics(
         it.addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
         it.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
     }
+
+    private val _profiles = object : MutableBLEProfiles {
+        override val events = MutableSharedFlow<BLEProfiles.Event>()
+
+        override fun services() {
+            coroutineScope.launch {
+                mutex.withLock {
+                    withContext(default) {
+                        val state = _states.value
+                        logger.debug("profiles services ${state?.address}")
+                        when (state) {
+                            is InternalState.Connected -> {
+                                if (state.status !is ConnectedStatus.Idling) TODO("RealBLEGenerics:profiles:services:state: $state")
+                                if (!state.gatt.discoverServices()) TODO("RealBLEGenerics:profiles:services:discover services error!")
+                            }
+                            else -> TODO("RealBLEGenerics:profiles:services:state: $state")
+                        }
+                    }
+                }
+            }
+        }
+    }
+    override val profiles: BLEProfiles = _profiles
 
     private fun onStates(oldState: InternalState?, newState: InternalState?) {
         if (oldState == null) {
