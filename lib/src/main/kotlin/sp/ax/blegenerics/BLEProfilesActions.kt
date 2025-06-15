@@ -9,9 +9,9 @@ inline fun <reified T : BLEGenericsService> BLEProfiles.Companion.services(conte
     context.startService(intent)
 }
 
-inline fun <reified T : BLEGenericsService> BLEProfiles.Companion.requestMTU(context: Context, size: Int) {
+inline fun <reified T : BLEGenericsService> BLEProfiles.Companion.changeMTU(context: Context, size: Int) {
     val intent = Intent(context, T::class.java)
-    intent.action = BLEGenericsService.BLEProfilesRequestMTUAction
+    intent.action = BLEGenericsService.BLEProfilesChangeMTUAction
     intent.putExtra("size", size)
     context.startService(intent)
 }

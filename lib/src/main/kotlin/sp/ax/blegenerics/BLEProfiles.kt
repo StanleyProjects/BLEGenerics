@@ -11,7 +11,7 @@ interface BLEProfiles {
     val events: SharedFlow<Event>
 
     fun services()
-    fun requestMTU(size: Int)
+    fun changeMTU(size: Int)
 
     companion object
 }

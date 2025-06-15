@@ -26,10 +26,10 @@ import sp.ax.blegenerics.BLEGenerics
 import sp.ax.blegenerics.BLEGenericsReceivers
 import sp.ax.blegenerics.BLEProfiles
 import sp.ax.blegenerics.BLEProfilesReceivers
+import sp.ax.blegenerics.changeMTU
 import sp.ax.blegenerics.connect
 import sp.ax.blegenerics.disconnect
 import sp.ax.blegenerics.pair
-import sp.ax.blegenerics.requestMTU
 import sp.ax.blegenerics.services
 import sp.ax.blegenerics.states
 import sp.ax.blegenerics.unpair
@@ -109,10 +109,10 @@ internal fun DeviceScreen(
                         .fillMaxWidth()
                         .height(48.dp)
                         .clickable {
-                            BLEProfiles.requestMTU<DeviceService>(context = context, size = 200)
+                            BLEProfiles.changeMTU<DeviceService>(context = context, size = 200)
                         }
                         .wrapContentSize(),
-                    text = "request MTU 200",
+                    text = "change MTU 200",
                 )
                 BasicText(
                     modifier = Modifier

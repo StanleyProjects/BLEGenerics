@@ -29,6 +29,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.util.Date
+import java.util.UUID
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -96,7 +97,7 @@ class RealBLEGenerics(
                 mutex.withLock {
                     when (status) {
                         BluetoothGatt.GATT_SUCCESS -> {
-                            _profiles.events.emit(BLEProfiles.Event.OnServices)
+                            _profiles.onResponse(BLEProfiles.Event.OnServices)
                         }
                         else -> {
                             logger.warning("on services discovered: ${gatt.hashCode()} [ status: $status ]")
@@ -111,7 +112,7 @@ class RealBLEGenerics(
                 mutex.withLock {
                     when (status) {
                         BluetoothGatt.GATT_SUCCESS -> {
-                            _profiles.events.emit(BLEProfiles.Event.OnMtuChanged(size = mtu))
+                            _profiles.onResponse(BLEProfiles.Event.OnMtuChanged(size = mtu))
                         }
                         else -> {
                             logger.warning("on MTU changed: ${gatt.hashCode()} [ status: $status | mtu: $mtu ]")
@@ -360,43 +361,72 @@ class RealBLEGenerics(
 
     private val _profiles = object : MutableBLEProfiles {
         override val events = MutableSharedFlow<BLEProfiles.Event>()
+        private val operations = mutableMapOf<UUID, ProfileOperation>()
+        private var current: UUID? = null
 
         override fun services() {
             coroutineScope.launch {
                 mutex.withLock {
                     withContext(default) {
-                        val state = _states.value
-                        logger.debug("profiles services ${state?.address}")
-                        when (state) {
-                            is InternalState.Connected -> {
-                                if (state.status !is ConnectedStatus.Idling) TODO("RealBLEGenerics:profiles:services:state: $state")
-//                                if (!state.isPaired) TODO("RealBLEGenerics:profiles:services:state: $state")
-                                if (!state.gatt.discoverServices()) TODO("RealBLEGenerics:profiles:services:discover services error!")
-                            }
-                            else -> TODO("RealBLEGenerics:profiles:services:state: $state")
-                        }
+                        perform(operation = ProfileOperation.Services)
                     }
                 }
             }
         }
 
-        override fun requestMTU(size: Int) {
+        override fun changeMTU(size: Int) {
             coroutineScope.launch {
                 mutex.withLock {
                     withContext(default) {
-                        val state = _states.value
-                        logger.debug("profiles services ${state?.address}")
-                        when (state) {
-                            is InternalState.Connected -> {
-                                if (state.status !is ConnectedStatus.Idling) TODO("RealBLEGenerics:profiles:request:MTU($size):state: $state")
-//                                if (!state.isPaired) TODO("RealBLEGenerics:profiles:request:MTU($size):state: $state")
-                                if (!state.gatt.requestMtu(size)) TODO("RealBLEGenerics:profiles:request:MTU($size):request MTU error!")
-                            }
-                            else -> TODO("RealBLEGenerics:profiles:request:MTU($size):state: $state")
-                        }
+                        perform(operation = ProfileOperation.ChangeMTU(size = size))
                     }
                 }
             }
+        }
+
+        override suspend fun perform(operation: ProfileOperation) {
+            val uuid = UUID.randomUUID()
+            operations[uuid] = operation
+            if (current == null) perform()
+        }
+
+        private fun perform() {
+            val state = _states.value
+            if (state !is InternalState.Connected) return
+            if (state.status !is ConnectedStatus.Idling) return
+            val (uuid, operation) = operations.entries.firstOrNull() ?: return
+            current = uuid
+            when (operation) {
+                is ProfileOperation.ChangeMTU -> {
+                    logger.debug("change MTU ${state.address}")
+                    if (!state.gatt.requestMtu(operation.size)) TODO("RealBLEGenerics:profiles:perform($operation):request MTU error!")
+                }
+                ProfileOperation.Services -> {
+                    logger.debug("profiles services ${state.address}")
+                    if (!state.gatt.discoverServices()) TODO("RealBLEGenerics:profiles:perform($operation):discover services error!")
+                }
+            }
+        }
+
+        private fun ProfileOperation.related(event: BLEProfiles.Event): Boolean {
+            return when (this) {
+                is ProfileOperation.ChangeMTU -> {
+                    event is BLEProfiles.Event.OnMtuChanged
+                }
+                ProfileOperation.Services -> {
+                    event is BLEProfiles.Event.OnServices
+                }
+            }
+        }
+
+        override suspend fun onResponse(event: BLEProfiles.Event) {
+            val uuid = current ?: return
+            val operation = operations[uuid] ?: TODO("MutableBLEProfiles:onResponse($event)")
+            if (!operation.related(event = event)) return
+            events.emit(event)
+            operations.remove(uuid)
+            current = null
+            perform()
         }
     }
     override val profiles: BLEProfiles = _profiles
