@@ -42,6 +42,14 @@ internal class OperationParcelable(
             BLEProfiles.Operation.Services -> {
                 dest.writeString("Services")
             }
+            is BLEProfiles.Operation.Descriptors.Write -> {
+                dest.writeString("Descriptors.Write")
+                dest.writeString(delegate.service.toString())
+                dest.writeString(delegate.characteristic.toString())
+                dest.writeString(delegate.descriptor.toString())
+                dest.writeInt(delegate.bytes.size)
+                dest.writeByteArray(delegate.bytes)
+            }
         }
     }
 
@@ -63,6 +71,19 @@ internal class OperationParcelable(
                         service = service,
                         characteristic = characteristic,
                         value = value,
+                    )
+                }
+                "Descriptors.Write" -> {
+                    val service = UUID.fromString(parcel.readString()!!)
+                    val characteristic = UUID.fromString(parcel.readString()!!)
+                    val descriptor = UUID.fromString(parcel.readString()!!)
+                    val bytes = ByteArray(parcel.readInt())
+                    parcel.readByteArray(bytes)
+                    BLEProfiles.Operation.Descriptors.Write(
+                        service = service,
+                        characteristic = characteristic,
+                        descriptor = descriptor,
+                        bytes = bytes,
                     )
                 }
                 else -> TODO("OperationParcelable:createFromParcel($parcel)")

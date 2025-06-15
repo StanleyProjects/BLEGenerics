@@ -61,6 +61,7 @@ internal fun Context.getBroadcast(event: BLEProfiles.Event): Intent {
         is BLEProfiles.Event.OnServices -> "OnServices"
         is BLEProfiles.Event.OnMtuChanged -> "OnMtuChanged"
         is BLEProfiles.Event.Characteristics.OnSetNotification -> "Characteristic.OnSetNotification"
+        is BLEProfiles.Event.Descriptors.OnWrite -> "Descriptors.OnWrite"
     }
     broadcast.putExtra("event", value)
     when (event) {
@@ -77,6 +78,12 @@ internal fun Context.getBroadcast(event: BLEProfiles.Event): Intent {
             broadcast.putExtra("service", event.service.toString())
             broadcast.putExtra("characteristic", event.characteristic.toString())
             broadcast.putExtra("value", event.value)
+        }
+        is BLEProfiles.Event.Descriptors.OnWrite -> {
+            broadcast.putExtra("service", event.service.toString())
+            broadcast.putExtra("characteristic", event.characteristic.toString())
+            broadcast.putExtra("descriptor", event.descriptor.toString())
+            broadcast.putExtra("bytes", event.bytes)
         }
     }
     return broadcast

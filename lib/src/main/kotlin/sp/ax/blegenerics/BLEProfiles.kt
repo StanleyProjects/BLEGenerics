@@ -1,6 +1,7 @@
 package sp.ax.blegenerics
 
 import kotlinx.coroutines.flow.SharedFlow
+import java.util.Objects
 import java.util.UUID
 
 interface BLEProfiles {
@@ -14,6 +15,34 @@ interface BLEProfiles {
                 val value: Boolean,
             ) : Characteristics
         }
+        sealed interface Descriptors : Event {
+            class OnWrite(
+                val service: UUID,
+                val characteristic: UUID,
+                val descriptor: UUID,
+                val bytes: ByteArray,
+            ) : Descriptors {
+                override fun equals(other: Any?): Boolean {
+                    return when (other) {
+                        is OnWrite -> {
+                            service == other.service &&
+                            characteristic == other.characteristic &&
+                            descriptor == other.descriptor &&
+                            bytes.contentEquals(other.bytes)
+                        }
+                        else -> false
+                    }
+                }
+
+                override fun hashCode(): Int {
+                    return Objects.hash(service, characteristic, descriptor, bytes.contentHashCode())
+                }
+
+                override fun toString(): String {
+                    return "OnWrite($service/$characteristic/$descriptor, bytes: ${bytes.size})"
+                }
+            }
+        }
     }
 
     sealed interface Operation {
@@ -25,6 +54,34 @@ interface BLEProfiles {
                 val characteristic: UUID,
                 val value: Boolean,
             ) : Characteristics
+        }
+        sealed interface Descriptors : Operation {
+            class Write(
+                val service: UUID,
+                val characteristic: UUID,
+                val descriptor: UUID,
+                val bytes: ByteArray,
+            ) : Descriptors {
+                override fun equals(other: Any?): Boolean {
+                    return when (other) {
+                        is Write -> {
+                            service == other.service &&
+                            characteristic == other.characteristic &&
+                            descriptor == other.descriptor &&
+                            bytes.contentEquals(other.bytes)
+                        }
+                        else -> false
+                    }
+                }
+
+                override fun hashCode(): Int {
+                    return Objects.hash(service, characteristic, descriptor, bytes.contentHashCode())
+                }
+
+                override fun toString(): String {
+                    return "Write($service/$characteristic/$descriptor, bytes: ${bytes.size})"
+                }
+            }
         }
     }
 

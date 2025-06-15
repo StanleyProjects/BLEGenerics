@@ -5,6 +5,7 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
+import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanSettings
@@ -120,7 +121,33 @@ class RealBLEGenerics(
                             _profiles.onResponse(BLEProfiles.Event.OnMtuChanged(value = mtu))
                         }
                         else -> {
-                            logger.warning("on MTU changed: ${gatt.hashCode()} [ status: $status | mtu: $mtu ]")
+                            logger.warning("on MTU changed: ${gatt?.hashCode()} [ status: $status | mtu: $mtu ]")
+                        }
+                    }
+                }
+            }
+        }
+
+        override fun onDescriptorWrite(
+            gatt: BluetoothGatt?,
+            descriptor: BluetoothGattDescriptor?,
+            status: Int,
+        ) {
+            coroutineScope.launch {
+                mutex.withLock {
+                    when (status) {
+                        BluetoothGatt.GATT_SUCCESS -> {
+                            if (descriptor == null) TODO("RealBLEGenerics:onDescriptorWrite($status):no descriptor!")
+                            val event = BLEProfiles.Event.Descriptors.OnWrite(
+                                service = descriptor.characteristic.service.uuid,
+                                characteristic = descriptor.characteristic.uuid,
+                                descriptor = descriptor.uuid,
+                                bytes = descriptor.value,
+                            )
+                            _profiles.onResponse(event = event)
+                        }
+                        else -> {
+                            logger.warning("on descriptor write: ${gatt?.hashCode()} [ status: $status | descriptor: ${descriptor?.uuid} ]")
                         }
                     }
                 }
@@ -410,6 +437,17 @@ class RealBLEGenerics(
                     )
                     onResponse(event = event)
                 }
+                is BLEProfiles.Operation.Descriptors.Write -> {
+                    val service = state.gatt.getService(operation.service) ?: TODO("No service ${operation.service}!")
+                    val characteristic = service.getCharacteristic(operation.characteristic) ?: TODO("No characteristic ${operation.characteristic}!")
+                    val descriptor = characteristic.getDescriptor(operation.descriptor) ?: TODO("No descriptor ${operation.descriptor}!")
+                    if (!descriptor.setValue(operation.bytes)) {
+                        TODO("RealBLEGenerics:profiles:perform($operation):set value error!")
+                    }
+                    if (!state.gatt.writeDescriptor(descriptor)) {
+                        TODO("RealBLEGenerics:profiles:perform($operation):DESCRIPTOR_WRITING_WAS_NOT_INITIATED!")
+                    }
+                }
             }
         }
 
@@ -423,6 +461,9 @@ class RealBLEGenerics(
                 }
                 is BLEProfiles.Operation.Characteristics.SetNotification -> {
                     event is BLEProfiles.Event.Characteristics.OnSetNotification
+                }
+                is BLEProfiles.Operation.Descriptors.Write -> {
+                    event is BLEProfiles.Event.Descriptors.OnWrite
                 }
             }
         }

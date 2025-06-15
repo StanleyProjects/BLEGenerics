@@ -1,5 +1,6 @@
 package sp.sample.blegenerics
 
+import android.bluetooth.BluetoothGattDescriptor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -72,6 +74,7 @@ internal fun DeviceScreen(
             }
         }
     }
+    val discovered = remember { mutableStateOf<Map<UUID, Set<UUID>>?>(null) }
     LaunchedEffect(Unit) {
         BLEProfilesReceivers.events(context = context).collect { event ->
             when (event) {
@@ -79,12 +82,16 @@ internal fun DeviceScreen(
                     val message = event.characteristics.entries.joinToString(separator = "\n") { (services, characteristics) -> "$services: $characteristics"}
                     println(message)
                     context.showToast("on services discovered")
+                    discovered.value = event.characteristics
                 }
                 is BLEProfiles.Event.OnMtuChanged -> {
                     context.showToast("on mtu changed: ${event.value}")
                 }
                 is BLEProfiles.Event.Characteristics.OnSetNotification -> {
                     context.showToast("on set notification: ${event.value}")
+                }
+                is BLEProfiles.Event.Descriptors.OnWrite -> {
+                    context.showToast("on write descriptor: ${event.descriptor}")
                 }
             }
         }
@@ -109,45 +116,68 @@ internal fun DeviceScreen(
             BasicText(text = "$state")
             Spacer(Modifier.weight(1f)) // todo
             if (state is BLEGenerics.State.Connected) {
-                BasicText(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .clickable {
-                            val service = UUID.fromString("00000000-cc7a-482a-984a-7f2ed5b3e58f") // todo
-                            val characteristic = UUID.fromString("00000001-8e22-4541-9d4c-21edae82ed19") // todo
-                            val operation = BLEProfiles.Operation.Characteristics.SetNotification(
-                                service = service,
-                                characteristic = characteristic,
-                                value = true,
-                            )
-                            perform<DeviceService>(context = context, operation = operation)
-                        }
-                        .wrapContentSize(),
-                    text = "set notification true",
-                )
-                BasicText(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .clickable {
-                            val operation = BLEProfiles.Operation.ChangeMTU(value = 200)
-                            perform<DeviceService>(context = context, operation = operation)
-                        }
-                        .wrapContentSize(),
-                    text = "change MTU 200",
-                )
-                BasicText(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .clickable {
-                            val operation = BLEProfiles.Operation.Services
-                            perform<DeviceService>(context = context, operation = operation)
-                        }
-                        .wrapContentSize(),
-                    text = "services",
-                )
+                val characteristics = discovered.value
+                if (characteristics == null) {
+                    BasicText(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .clickable {
+                                val operation = BLEProfiles.Operation.Services
+                                perform<DeviceService>(context = context, operation = operation)
+                            }
+                            .wrapContentSize(),
+                        text = "services",
+                    )
+                } else {
+                    BasicText(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .clickable {
+                                val service = UUID.fromString("00000000-cc7a-482a-984a-7f2ed5b3e58f") // todo
+                                val characteristic = UUID.fromString("6e400003-b5a3-f393-e0a9-e50e24dcca9e") // todo
+                                val descriptor = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb") // todo
+                                val operation = BLEProfiles.Operation.Descriptors.Write(
+                                    service = service,
+                                    characteristic = characteristic,
+                                    descriptor = descriptor,
+                                    bytes = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE,
+                                )
+                                perform<DeviceService>(context = context, operation = operation)
+                            }
+                            .wrapContentSize(),
+                        text = "write descriptor",
+                    )
+                    BasicText(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .clickable {
+                                val service = UUID.fromString("00000000-cc7a-482a-984a-7f2ed5b3e58f") // todo
+                                val characteristic = UUID.fromString("00000001-8e22-4541-9d4c-21edae82ed19") // todo
+                                val operation = BLEProfiles.Operation.Characteristics.SetNotification(
+                                    service = service,
+                                    characteristic = characteristic,
+                                    value = true,
+                                )
+                                perform<DeviceService>(context = context, operation = operation)
+                            }
+                            .wrapContentSize(),
+                        text = "set notification true",
+                    )
+                    BasicText(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .clickable {
+                                val operation = BLEProfiles.Operation.ChangeMTU(value = 200)
+                                perform<DeviceService>(context = context, operation = operation)
+                            }
+                            .wrapContentSize(),
+                        text = "change MTU 200",
+                    )
+                }
                 if (state.isPaired) {
                     BasicText(
                         modifier = Modifier
