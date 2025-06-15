@@ -414,20 +414,17 @@ class RealBLEGenerics(
         }
 
         override suspend fun emit(event: BLEProfiles.Event) {
+            if (!performing.get()) return
             logger.info("profiles event $event")
-            perform()
             _events.emit(event)
+            perform()
         }
 
         override suspend fun clear() {
-            coroutineScope.launch {
-                mutex.withLock {
-                    withContext(default) {
-                        logger.info("profiles clear")
-                        performing.set(false)
-                        operations.clear()
-                    }
-                }
+            logger.info("profiles clear")
+            mutex.withLock {
+                performing.set(false)
+                operations.clear()
             }
         }
 
@@ -577,6 +574,11 @@ class RealBLEGenerics(
                     } else if (oldState is InternalState.Connected && oldState.status is ConnectedStatus.Pairing) {
                         context.unregisterReceiver(receiversPairing)
                     }
+                    if (oldState is InternalState.Connected && oldState.status == ConnectedStatus.Idling) {
+                        if (newState !is InternalState.Connected || newState.status != ConnectedStatus.Idling) {
+                            _profiles.clear()
+                        }
+                    }
                     if (newState is InternalState.Connecting && newState > oldState) {
                         launch(default) {
                             val timeMax = 4.seconds
@@ -605,7 +607,6 @@ class RealBLEGenerics(
                     if (newState is InternalState.Connected && newState > oldState) {
                         register(context, receiversConnected, intentFiltersConnected)
                     } else if (oldState is InternalState.Connected && oldState > newState) {
-                        _profiles.clear()
                         context.unregisterReceiver(receiversConnected)
                         try {
                             oldState.gatt.close()

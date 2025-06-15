@@ -75,6 +75,11 @@ internal fun DeviceScreen(
         }
     }
     val discovered = remember { mutableStateOf<Map<UUID, Set<UUID>>?>(null) }
+    LaunchedEffect(state is BLEGenerics.State.Connected) {
+        if (state !is BLEGenerics.State.Connected) {
+            discovered.value = null
+        }
+    }
     LaunchedEffect(Unit) {
         BLEProfilesReceivers.events(context = context).collect { event ->
             when (event) {
