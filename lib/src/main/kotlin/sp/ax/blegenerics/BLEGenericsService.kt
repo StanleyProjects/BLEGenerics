@@ -62,7 +62,6 @@ abstract class BLEGenericsService(
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        println("[BLEGenericsService]:onStartCommand(${intent?.action} ${intent?.extras?.keySet()?.toList()})") // todo
         when (intent?.action) {
             BLEGenericsConnectAction -> {
                 val address = intent.getStringExtra("address")

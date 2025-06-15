@@ -20,7 +20,7 @@ interface BLEProfiles {
                 val service: UUID,
                 val characteristic: UUID,
                 val descriptor: UUID,
-                val bytes: ByteArray,
+                val result: Result<ByteArray>,
             ) : Descriptors {
                 override fun equals(other: Any?): Boolean {
                     return when (other) {
@@ -28,18 +28,32 @@ interface BLEProfiles {
                             service == other.service &&
                             characteristic == other.characteristic &&
                             descriptor == other.descriptor &&
-                            bytes.contentEquals(other.bytes)
+                            result.eq(other.result)
                         }
                         else -> false
                     }
                 }
 
+                private fun getHashCode(result: Result<ByteArray>): Int {
+                    return result.fold({it.contentHashCode()}, {it.hashCode()})
+                }
+
+                private fun Result<ByteArray>.eq(other: Result<ByteArray>): Boolean {
+                    if (isSuccess) {
+                        if (other.isFailure) return false
+                        return getOrThrow().contentEquals(other.getOrThrow())
+                    } else {
+                        if (other.isSuccess) return false
+                        return exceptionOrNull() == other.exceptionOrNull()
+                    }
+                }
+
                 override fun hashCode(): Int {
-                    return Objects.hash(service, characteristic, descriptor, bytes.contentHashCode())
+                    return Objects.hash(service, characteristic, descriptor, getHashCode(result))
                 }
 
                 override fun toString(): String {
-                    return "OnWrite($service/$characteristic/$descriptor, bytes: ${bytes.size})"
+                    return "OnWrite($service/$characteristic/$descriptor, result: ${result.map { it.size }})"
                 }
             }
         }

@@ -91,7 +91,9 @@ internal fun DeviceScreen(
                     context.showToast("on set notification: ${event.value}")
                 }
                 is BLEProfiles.Event.Descriptors.OnWrite -> {
-                    context.showToast("on write descriptor: ${event.descriptor}")
+                    val message = "descriptor ${event.descriptor} write success: ${event.result.isSuccess}"
+                    println(message)
+//                    context.showToast("on write descriptor ${event.descriptor}")
                 }
             }
         }
@@ -130,6 +132,7 @@ internal fun DeviceScreen(
                         text = "services",
                     )
                 } else {
+                    val ops = 5
                     BasicText(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -144,10 +147,13 @@ internal fun DeviceScreen(
                                     descriptor = descriptor,
                                     bytes = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE,
                                 )
-                                perform<DeviceService>(context = context, operation = operation)
+                                (1..ops).forEach { number ->
+                                    println("perform #$number")
+                                    perform<DeviceService>(context = context, operation = operation)
+                                }
                             }
                             .wrapContentSize(),
-                        text = "write descriptor",
+                        text = "write $ops descriptors",
                     )
                     BasicText(
                         modifier = Modifier
@@ -208,6 +214,7 @@ internal fun DeviceScreen(
                     .fillMaxWidth()
                     .height(48.dp)
                     .clickable(enabled = enabled) {
+                        println("on disconnect...")
                         disconnect<DeviceService>(context = context)
                     }
                     .wrapContentSize(),

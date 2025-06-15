@@ -83,7 +83,14 @@ internal fun Context.getBroadcast(event: BLEProfiles.Event): Intent {
             broadcast.putExtra("service", event.service.toString())
             broadcast.putExtra("characteristic", event.characteristic.toString())
             broadcast.putExtra("descriptor", event.descriptor.toString())
-            broadcast.putExtra("bytes", event.bytes)
+            event.result.fold(
+                onSuccess = { bytes ->
+                    broadcast.putExtra("bytes", bytes)
+                },
+                onFailure = { error ->
+                    broadcast.putExtra("error", error)
+                }
+            )
         }
     }
     return broadcast

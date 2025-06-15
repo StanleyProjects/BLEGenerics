@@ -42,12 +42,18 @@ object BLEProfilesReceivers {
                             val service = intent.getStringExtra("service") ?: return
                             val characteristic = intent.getStringExtra("characteristic") ?: return
                             val descriptor = intent.getStringExtra("descriptor") ?: return
-                            val bytes = intent.getByteArrayExtra("bytes") ?: return
+                            val result = when (val bytes = intent.getByteArrayExtra("bytes")) {
+                                null -> {
+                                    val error = intent.getSerializableExtra("error") as? Throwable ?: return
+                                    Result.failure(error)
+                                }
+                                else -> Result.success(bytes)
+                            }
                             BLEProfiles.Event.Descriptors.OnWrite(
                                 service = UUID.fromString(service),
                                 characteristic = UUID.fromString(characteristic),
                                 descriptor = UUID.fromString(descriptor),
-                                bytes = bytes,
+                                result = result,
                             )
                         }
                         else -> return

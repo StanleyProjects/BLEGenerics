@@ -31,6 +31,7 @@ internal class ScannerService : BLEScannerService(
             .setContentText("scanner:text")
             .setAutoCancel(false)
             .setOngoing(false)
+            .setSilent(true)
             .addAction(action)
             .build()
     }

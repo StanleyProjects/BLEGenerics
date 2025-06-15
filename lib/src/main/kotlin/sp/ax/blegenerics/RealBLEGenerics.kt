@@ -24,13 +24,17 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.util.Date
+import java.util.Queue
 import java.util.UUID
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -103,7 +107,7 @@ class RealBLEGenerics(
                                 s.uuid to s.characteristics.map { c -> c.uuid }.toSet()
                             }
                             val event = BLEProfiles.Event.OnServices(characteristics = characteristics)
-                            _profiles.onResponse(event = event)
+                            _profiles.emit(event)
                         }
                         else -> {
                             logger.warning("on services discovered: ${gatt?.hashCode()} [ status: $status ]")
@@ -118,7 +122,8 @@ class RealBLEGenerics(
                 mutex.withLock {
                     when (status) {
                         BluetoothGatt.GATT_SUCCESS -> {
-                            _profiles.onResponse(BLEProfiles.Event.OnMtuChanged(value = mtu))
+                            val event = BLEProfiles.Event.OnMtuChanged(value = mtu)
+                            _profiles.emit(event)
                         }
                         else -> {
                             logger.warning("on MTU changed: ${gatt?.hashCode()} [ status: $status | mtu: $mtu ]")
@@ -142,9 +147,9 @@ class RealBLEGenerics(
                                 service = descriptor.characteristic.service.uuid,
                                 characteristic = descriptor.characteristic.uuid,
                                 descriptor = descriptor.uuid,
-                                bytes = descriptor.value,
+                                result = Result.success(descriptor.value.copyOf()),
                             )
-                            _profiles.onResponse(event = event)
+                            _profiles.emit(event)
                         }
                         else -> {
                             logger.warning("on descriptor write: ${gatt?.hashCode()} [ status: $status | descriptor: ${descriptor?.uuid} ]")
@@ -392,27 +397,55 @@ class RealBLEGenerics(
     }
 
     private val _profiles = object : MutableBLEProfiles {
-        override val events = MutableSharedFlow<BLEProfiles.Event>()
-        private val operations = mutableMapOf<UUID, BLEProfiles.Operation>()
-        private var current: UUID? = null
+        private val _events = MutableSharedFlow<BLEProfiles.Event>()
+        override val events = _events.asSharedFlow()
+        private val operations: Queue<BLEProfiles.Operation> = ConcurrentLinkedQueue()
+        private val performing = AtomicBoolean(false)
 
         override fun perform(operation: BLEProfiles.Operation) {
             coroutineScope.launch {
                 mutex.withLock {
-                    val uuid = UUID.randomUUID()
-                    operations[uuid] = operation
-                    if (current == null) perform()
+                    withContext(default) {
+                        operations += operation
+                        if (performing.compareAndSet(false, true)) perform()
+                    }
+                }
+            }
+        }
+
+        override suspend fun emit(event: BLEProfiles.Event) {
+            logger.info("profiles event $event")
+            perform()
+            _events.emit(event)
+        }
+
+        override suspend fun clear() {
+            coroutineScope.launch {
+                mutex.withLock {
+                    withContext(default) {
+                        logger.info("profiles clear")
+                        performing.set(false)
+                        operations.clear()
+                    }
                 }
             }
         }
 
         private suspend fun perform() {
             val state = _states.value
-            if (state !is InternalState.Connected) return
-            if (state.status !is ConnectedStatus.Idling) return
-            val (uuid, operation) = operations.entries.firstOrNull() ?: return
-            current = uuid
-            logger.debug("perform operation $uuid $operation")
+            if (state !is InternalState.Connected || state.status !is ConnectedStatus.Idling) {
+                logger.info("stop operations")
+                performing.set(false)
+                operations.clear()
+                return
+            }
+            val operation = operations.poll()
+            if (operation == null) {
+                logger.info("no operation")
+                performing.set(false)
+                return
+            }
+            logger.debug("operation $operation")
             when (operation) {
                 is BLEProfiles.Operation.ChangeMTU -> {
                     if (!state.gatt.requestMtu(operation.value)) {
@@ -435,7 +468,7 @@ class RealBLEGenerics(
                         characteristic = operation.characteristic,
                         value = operation.value,
                     )
-                    onResponse(event = event)
+                    emit(event)
                 }
                 is BLEProfiles.Operation.Descriptors.Write -> {
                     val service = state.gatt.getService(operation.service) ?: TODO("No service ${operation.service}!")
@@ -445,37 +478,16 @@ class RealBLEGenerics(
                         TODO("RealBLEGenerics:profiles:perform($operation):set value error!")
                     }
                     if (!state.gatt.writeDescriptor(descriptor)) {
-                        TODO("RealBLEGenerics:profiles:perform($operation):DESCRIPTOR_WRITING_WAS_NOT_INITIATED!")
+                        val event = BLEProfiles.Event.Descriptors.OnWrite(
+                            service = descriptor.characteristic.service.uuid,
+                            characteristic = descriptor.characteristic.uuid,
+                            descriptor = descriptor.uuid,
+                            result = Result.failure(IllegalStateException("DESCRIPTOR_WRITING_WAS_NOT_INITIATED!")),
+                        )
+                        emit(event)
                     }
                 }
             }
-        }
-
-        private fun BLEProfiles.Operation.related(event: BLEProfiles.Event): Boolean {
-            return when (this) {
-                is BLEProfiles.Operation.ChangeMTU -> {
-                    event is BLEProfiles.Event.OnMtuChanged
-                }
-                BLEProfiles.Operation.Services -> {
-                    event is BLEProfiles.Event.OnServices
-                }
-                is BLEProfiles.Operation.Characteristics.SetNotification -> {
-                    event is BLEProfiles.Event.Characteristics.OnSetNotification
-                }
-                is BLEProfiles.Operation.Descriptors.Write -> {
-                    event is BLEProfiles.Event.Descriptors.OnWrite
-                }
-            }
-        }
-
-        override suspend fun onResponse(event: BLEProfiles.Event) {
-            val uuid = current ?: return
-            val operation = operations[uuid] ?: TODO("MutableBLEProfiles:onResponse($event)")
-            if (!operation.related(event = event)) return
-            events.emit(event)
-            operations.remove(uuid)
-            current = null
-            perform()
         }
     }
     override val profiles: BLEProfiles = _profiles
@@ -572,12 +584,12 @@ class RealBLEGenerics(
                             val timeStart = now()
                             logger.info("connecting start: ${Date(timeStart.inWholeMilliseconds)}")
                             while (true) {
-                                val state = _states.value
-                                if (state !is InternalState.Connecting) break
+                                val _state = _states.value
+                                if (_state !is InternalState.Connecting) break
                                 val timeDiff = now() - timeStart
                                 if (timeDiff > timeMax) {
                                     logger.warning("connecting timeout: $timeDiff")
-                                    _states.value = InternalState.Searching(address = state.address)
+                                    _states.value = InternalState.Searching(address = _state.address)
                                     break
                                 }
                                 delay(timeDelay)
@@ -593,6 +605,7 @@ class RealBLEGenerics(
                     if (newState is InternalState.Connected && newState > oldState) {
                         register(context, receiversConnected, intentFiltersConnected)
                     } else if (oldState is InternalState.Connected && oldState > newState) {
+                        _profiles.clear()
                         context.unregisterReceiver(receiversConnected)
                         try {
                             oldState.gatt.close()
