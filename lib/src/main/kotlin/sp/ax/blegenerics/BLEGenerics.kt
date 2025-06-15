@@ -32,6 +32,4 @@ interface BLEGenerics {
     fun disconnect()
     fun pair(pin: String?)
     fun unpair()
-
-    companion object
 }

@@ -26,14 +26,14 @@ import sp.ax.blegenerics.BLEGenerics
 import sp.ax.blegenerics.BLEGenericsReceivers
 import sp.ax.blegenerics.BLEProfiles
 import sp.ax.blegenerics.BLEProfilesReceivers
-import sp.ax.blegenerics.changeMTU
 import sp.ax.blegenerics.connect
 import sp.ax.blegenerics.disconnect
 import sp.ax.blegenerics.pair
-import sp.ax.blegenerics.services
+import sp.ax.blegenerics.perform
 import sp.ax.blegenerics.states
 import sp.ax.blegenerics.unpair
 import sp.ax.blescanner.BLEDevice
+import java.util.UUID
 
 @Composable
 internal fun DeviceScreen(
@@ -48,13 +48,13 @@ internal fun DeviceScreen(
     LaunchedEffect(Unit) {
         BLEGenericsReceivers.states(context = context).take(1).collect { state ->
             if (state == null) {
-                BLEGenerics.connect<DeviceService>(context = context, address = device.address)
+                connect<DeviceService>(context = context, address = device.address)
             }
         }
     }
     LaunchedEffect(Unit) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            BLEGenerics.states<DeviceService>(context = context)
+            states<DeviceService>(context = context)
         }
     }
     LaunchedEffect(Unit) {
@@ -81,7 +81,10 @@ internal fun DeviceScreen(
                     context.showToast("on services discovered")
                 }
                 is BLEProfiles.Event.OnMtuChanged -> {
-                    context.showToast("on mtu changed: ${event.size}")
+                    context.showToast("on mtu changed: ${event.value}")
+                }
+                is BLEProfiles.Event.Characteristics.OnSetNotification -> {
+                    context.showToast("on set notification: ${event.value}")
                 }
             }
         }
@@ -111,7 +114,25 @@ internal fun DeviceScreen(
                         .fillMaxWidth()
                         .height(48.dp)
                         .clickable {
-                            BLEProfiles.changeMTU<DeviceService>(context = context, size = 200)
+                            val service = UUID.fromString("00000000-cc7a-482a-984a-7f2ed5b3e58f") // todo
+                            val characteristic = UUID.fromString("00000001-8e22-4541-9d4c-21edae82ed19") // todo
+                            val operation = BLEProfiles.Operation.Characteristics.SetNotification(
+                                service = service,
+                                characteristic = characteristic,
+                                value = true,
+                            )
+                            perform<DeviceService>(context = context, operation = operation)
+                        }
+                        .wrapContentSize(),
+                    text = "set notification true",
+                )
+                BasicText(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .clickable {
+                            val operation = BLEProfiles.Operation.ChangeMTU(value = 200)
+                            perform<DeviceService>(context = context, operation = operation)
                         }
                         .wrapContentSize(),
                     text = "change MTU 200",
@@ -121,7 +142,8 @@ internal fun DeviceScreen(
                         .fillMaxWidth()
                         .height(48.dp)
                         .clickable {
-                            BLEProfiles.services<DeviceService>(context = context)
+                            val operation = BLEProfiles.Operation.Services
+                            perform<DeviceService>(context = context, operation = operation)
                         }
                         .wrapContentSize(),
                     text = "services",
@@ -132,7 +154,7 @@ internal fun DeviceScreen(
                             .fillMaxWidth()
                             .height(48.dp)
                             .clickable {
-                                BLEGenerics.unpair<DeviceService>(context = context)
+                                unpair<DeviceService>(context = context)
                             }
                             .wrapContentSize(),
                         text = "unpair",
@@ -144,7 +166,7 @@ internal fun DeviceScreen(
                             .fillMaxWidth()
                             .height(48.dp)
                             .clickable {
-                                BLEGenerics.pair<DeviceService>(context = context, pin = pin)
+                                pair<DeviceService>(context = context, pin = pin)
                             }
                             .wrapContentSize(),
                         text = "pair: $pin",
@@ -156,7 +178,7 @@ internal fun DeviceScreen(
                     .fillMaxWidth()
                     .height(48.dp)
                     .clickable(enabled = enabled) {
-                        BLEGenerics.disconnect<DeviceService>(context = context)
+                        disconnect<DeviceService>(context = context)
                     }
                     .wrapContentSize(),
                 text = "disconnect",

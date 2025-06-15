@@ -117,7 +117,7 @@ class RealBLEGenerics(
                 mutex.withLock {
                     when (status) {
                         BluetoothGatt.GATT_SUCCESS -> {
-                            _profiles.onResponse(BLEProfiles.Event.OnMtuChanged(size = mtu))
+                            _profiles.onResponse(BLEProfiles.Event.OnMtuChanged(value = mtu))
                         }
                         else -> {
                             logger.warning("on MTU changed: ${gatt.hashCode()} [ status: $status | mtu: $mtu ]")
@@ -366,60 +366,63 @@ class RealBLEGenerics(
 
     private val _profiles = object : MutableBLEProfiles {
         override val events = MutableSharedFlow<BLEProfiles.Event>()
-        private val operations = mutableMapOf<UUID, ProfileOperation>()
+        private val operations = mutableMapOf<UUID, BLEProfiles.Operation>()
         private var current: UUID? = null
 
-        override fun services() {
+        override fun perform(operation: BLEProfiles.Operation) {
             coroutineScope.launch {
                 mutex.withLock {
-                    withContext(default) {
-                        perform(operation = ProfileOperation.Services)
-                    }
+                    val uuid = UUID.randomUUID()
+                    operations[uuid] = operation
+                    if (current == null) perform()
                 }
             }
         }
 
-        override fun changeMTU(size: Int) {
-            coroutineScope.launch {
-                mutex.withLock {
-                    withContext(default) {
-                        perform(operation = ProfileOperation.ChangeMTU(size = size))
-                    }
-                }
-            }
-        }
-
-        override suspend fun perform(operation: ProfileOperation) {
-            val uuid = UUID.randomUUID()
-            operations[uuid] = operation
-            if (current == null) perform()
-        }
-
-        private fun perform() {
+        private suspend fun perform() {
             val state = _states.value
             if (state !is InternalState.Connected) return
             if (state.status !is ConnectedStatus.Idling) return
             val (uuid, operation) = operations.entries.firstOrNull() ?: return
             current = uuid
+            logger.debug("perform operation $uuid $operation")
             when (operation) {
-                is ProfileOperation.ChangeMTU -> {
-                    logger.debug("change MTU ${state.address}")
-                    if (!state.gatt.requestMtu(operation.size)) TODO("RealBLEGenerics:profiles:perform($operation):request MTU error!")
+                is BLEProfiles.Operation.ChangeMTU -> {
+                    if (!state.gatt.requestMtu(operation.value)) {
+                        TODO("RealBLEGenerics:profiles:perform($operation):request MTU error!")
+                    }
                 }
-                ProfileOperation.Services -> {
-                    logger.debug("profiles services ${state.address}")
-                    if (!state.gatt.discoverServices()) TODO("RealBLEGenerics:profiles:perform($operation):discover services error!")
+                BLEProfiles.Operation.Services -> {
+                    if (!state.gatt.discoverServices()) {
+                        TODO("RealBLEGenerics:profiles:perform($operation):discover services error!")
+                    }
+                }
+                is BLEProfiles.Operation.Characteristics.SetNotification -> {
+                    val service = state.gatt.getService(operation.service) ?: TODO("No service ${operation.service}!")
+                    val characteristic = service.getCharacteristic(operation.characteristic) ?: TODO("No characteristic ${operation.characteristic}!")
+                    if (!state.gatt.setCharacteristicNotification(characteristic, operation.value)) {
+                        TODO("RealBLEGenerics:profiles:perform($operation):NOTIFICATION_STATUS_WAS_NOT_SUCCESSFULLY_SET!")
+                    }
+                    val event = BLEProfiles.Event.Characteristics.OnSetNotification(
+                        service = operation.service,
+                        characteristic = operation.characteristic,
+                        value = operation.value,
+                    )
+                    onResponse(event = event)
                 }
             }
         }
 
-        private fun ProfileOperation.related(event: BLEProfiles.Event): Boolean {
+        private fun BLEProfiles.Operation.related(event: BLEProfiles.Event): Boolean {
             return when (this) {
-                is ProfileOperation.ChangeMTU -> {
+                is BLEProfiles.Operation.ChangeMTU -> {
                     event is BLEProfiles.Event.OnMtuChanged
                 }
-                ProfileOperation.Services -> {
+                BLEProfiles.Operation.Services -> {
                     event is BLEProfiles.Event.OnServices
+                }
+                is BLEProfiles.Operation.Characteristics.SetNotification -> {
+                    event is BLEProfiles.Event.Characteristics.OnSetNotification
                 }
             }
         }

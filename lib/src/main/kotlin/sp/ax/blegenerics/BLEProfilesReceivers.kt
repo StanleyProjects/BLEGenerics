@@ -24,9 +24,19 @@ object BLEProfilesReceivers {
                             BLEProfiles.Event.OnServices(characteristics = characteristics)
                         }
                         "OnMtuChanged" -> {
-                            if (!intent.hasExtra("size")) TODO("BLEProfilesReceivers:events: $intent")
-                            val size = intent.getIntExtra("size", -1)
-                            BLEProfiles.Event.OnMtuChanged(size = size)
+                            if (!intent.hasExtra("value")) TODO("BLEProfilesReceivers:events: $intent")
+                            val value = intent.getIntExtra("value", -1)
+                            BLEProfiles.Event.OnMtuChanged(value = value)
+                        }
+                        "Characteristic.OnSetNotification" -> {
+                            val service = intent.getStringExtra("service") ?: return
+                            val characteristic = intent.getStringExtra("characteristic") ?: return
+                            val value = intent.getBooleanExtra("value", false)
+                            BLEProfiles.Event.Characteristics.OnSetNotification(
+                                service = UUID.fromString(service),
+                                characteristic = UUID.fromString(characteristic),
+                                value = value,
+                            )
                         }
                         else -> return
                     }

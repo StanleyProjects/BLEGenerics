@@ -7,6 +7,7 @@ import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.IBinder
+import android.os.Parcelable
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.drop
@@ -81,13 +82,10 @@ abstract class BLEGenericsService(
             BLEGenericsUnpairAction -> {
                 generics.unpair()
             }
-            BLEProfilesServicesAction -> {
-                generics.profiles.services()
-            }
-            BLEProfilesChangeMTUAction -> {
-                val size = intent.getIntExtra("size", -1)
-                if (size < 0) TODO("DeviceService:onStartCommand($intent)")
-                generics.profiles.changeMTU(size = size)
+            BLEProfilesOperationsAction -> {
+                val parcelable = intent.getParcelableExtra<Parcelable>("operation")
+                if (parcelable !is OperationParcelable) TODO("DeviceService:onStartCommand($intent)")
+                generics.profiles.perform(operation = parcelable.delegate)
             }
         }
         return START_NOT_STICKY
@@ -106,7 +104,6 @@ abstract class BLEGenericsService(
         const val BLEGenericsPairAction = "sp.ax.blegenerics.BLEGenericsPairAction"
         const val BLEGenericsUnpairAction = "sp.ax.blegenerics.BLEGenericsUnpairAction"
         const val BLEProfilesEventsAction = "sp.ax.blegenerics.BLEProfilesEventsAction"
-        const val BLEProfilesServicesAction = "sp.ax.blegenerics.BLEProfilesServicesAction"
-        const val BLEProfilesChangeMTUAction = "sp.ax.blegenerics.BLEProfilesChangeMTUAction"
+        const val BLEProfilesOperationsAction = "sp.ax.blegenerics.BLEProfilesOperationsAction"
     }
 }
