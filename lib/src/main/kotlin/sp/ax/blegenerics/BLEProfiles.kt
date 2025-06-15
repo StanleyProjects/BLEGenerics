@@ -10,4 +10,6 @@ interface BLEProfiles {
     val events: SharedFlow<Event>
 
     fun services()
+
+    companion object
 }
