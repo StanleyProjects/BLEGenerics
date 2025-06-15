@@ -58,7 +58,7 @@ internal fun Context.getBroadcast(event: BLEProfiles.Event): Intent {
     val broadcast = Intent(BLEGenericsService.BLEProfilesEventsAction)
     broadcast.setPackage(packageName) // https://stackoverflow.com/a/76920719/4398606
     val value = when (event) {
-        BLEProfiles.Event.OnServices -> "OnServices"
+        is BLEProfiles.Event.OnServices -> "OnServices"
         is BLEProfiles.Event.OnMtuChanged -> "OnMtuChanged"
     }
     broadcast.putExtra("event", value)
@@ -66,8 +66,11 @@ internal fun Context.getBroadcast(event: BLEProfiles.Event): Intent {
         is BLEProfiles.Event.OnMtuChanged -> {
             broadcast.putExtra("size", event.size)
         }
-        else -> {
-            // noop
+        is BLEProfiles.Event.OnServices -> {
+            broadcast.putExtra("services", event.characteristics.keys.map { it.toString() }.toTypedArray())
+            event.characteristics.forEach { (service, characteristics) ->
+                broadcast.putExtra("characteristics:$service", characteristics.map { it.toString() }.toTypedArray())
+            }
         }
     }
     return broadcast

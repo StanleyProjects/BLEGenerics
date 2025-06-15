@@ -97,10 +97,15 @@ class RealBLEGenerics(
                 mutex.withLock {
                     when (status) {
                         BluetoothGatt.GATT_SUCCESS -> {
-                            _profiles.onResponse(BLEProfiles.Event.OnServices)
+                            if (gatt == null) TODO("RealBLEGenerics:onServicesDiscovered($status):no gatt!")
+                            val characteristics = gatt.services.associate { s ->
+                                s.uuid to s.characteristics.map { c -> c.uuid }.toSet()
+                            }
+                            val event = BLEProfiles.Event.OnServices(characteristics = characteristics)
+                            _profiles.onResponse(event = event)
                         }
                         else -> {
-                            logger.warning("on services discovered: ${gatt.hashCode()} [ status: $status ]")
+                            logger.warning("on services discovered: ${gatt?.hashCode()} [ status: $status ]")
                         }
                     }
                 }

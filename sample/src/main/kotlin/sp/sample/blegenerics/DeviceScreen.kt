@@ -75,7 +75,9 @@ internal fun DeviceScreen(
     LaunchedEffect(Unit) {
         BLEProfilesReceivers.events(context = context).collect { event ->
             when (event) {
-                BLEProfiles.Event.OnServices -> {
+                is BLEProfiles.Event.OnServices -> {
+                    val message = event.characteristics.entries.joinToString(separator = "\n") { (services, characteristics) -> "$services: $characteristics"}
+                    println(message)
                     context.showToast("on services discovered")
                 }
                 is BLEProfiles.Event.OnMtuChanged -> {
