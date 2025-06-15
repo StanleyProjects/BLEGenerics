@@ -105,6 +105,21 @@ class RealBLEGenerics(
                 }
             }
         }
+
+        override fun onMtuChanged(gatt: BluetoothGatt?, mtu: Int, status: Int) {
+            coroutineScope.launch {
+                mutex.withLock {
+                    when (status) {
+                        BluetoothGatt.GATT_SUCCESS -> {
+                            _profiles.events.emit(BLEProfiles.Event.OnMtuChanged(size = mtu))
+                        }
+                        else -> {
+                            logger.warning("on MTU changed: ${gatt.hashCode()} [ status: $status | mtu: $mtu ]")
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private val _states = MutableStateFlow<InternalState?>(null)
@@ -355,10 +370,29 @@ class RealBLEGenerics(
                         when (state) {
                             is InternalState.Connected -> {
                                 if (state.status !is ConnectedStatus.Idling) TODO("RealBLEGenerics:profiles:services:state: $state")
-                                if (!state.isPaired) TODO("RealBLEGenerics:profiles:services:state: $state")
+//                                if (!state.isPaired) TODO("RealBLEGenerics:profiles:services:state: $state")
                                 if (!state.gatt.discoverServices()) TODO("RealBLEGenerics:profiles:services:discover services error!")
                             }
                             else -> TODO("RealBLEGenerics:profiles:services:state: $state")
+                        }
+                    }
+                }
+            }
+        }
+
+        override fun requestMTU(size: Int) {
+            coroutineScope.launch {
+                mutex.withLock {
+                    withContext(default) {
+                        val state = _states.value
+                        logger.debug("profiles services ${state?.address}")
+                        when (state) {
+                            is InternalState.Connected -> {
+                                if (state.status !is ConnectedStatus.Idling) TODO("RealBLEGenerics:profiles:request:MTU($size):state: $state")
+//                                if (!state.isPaired) TODO("RealBLEGenerics:profiles:request:MTU($size):state: $state")
+                                if (!state.gatt.requestMtu(size)) TODO("RealBLEGenerics:profiles:request:MTU($size):request MTU error!")
+                            }
+                            else -> TODO("RealBLEGenerics:profiles:request:MTU($size):state: $state")
                         }
                     }
                 }

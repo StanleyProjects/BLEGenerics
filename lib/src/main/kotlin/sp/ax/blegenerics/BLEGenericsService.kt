@@ -84,6 +84,11 @@ abstract class BLEGenericsService(
             BLEProfilesServicesAction -> {
                 generics.profiles.services()
             }
+            BLEProfilesRequestMTUAction -> {
+                val size = intent.getIntExtra("size", -1)
+                if (size < 0) TODO("DeviceService:onStartCommand($intent)")
+                generics.profiles.requestMTU(size = size)
+            }
         }
         return START_NOT_STICKY
     }
@@ -102,5 +107,6 @@ abstract class BLEGenericsService(
         const val BLEGenericsUnpairAction = "sp.ax.blegenerics.BLEGenericsUnpairAction"
         const val BLEProfilesEventsAction = "sp.ax.blegenerics.BLEProfilesEventsAction"
         const val BLEProfilesServicesAction = "sp.ax.blegenerics.BLEProfilesServicesAction"
+        const val BLEProfilesRequestMTUAction = "sp.ax.blegenerics.BLEProfilesRequestMTUAction"
     }
 }

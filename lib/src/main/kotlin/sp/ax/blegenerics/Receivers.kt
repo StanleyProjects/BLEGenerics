@@ -59,8 +59,17 @@ internal fun Context.getBroadcast(event: BLEProfiles.Event): Intent {
     broadcast.setPackage(packageName) // https://stackoverflow.com/a/76920719/4398606
     val value = when (event) {
         BLEProfiles.Event.OnServices -> "OnServices"
+        is BLEProfiles.Event.OnMtuChanged -> "OnMtuChanged"
     }
     broadcast.putExtra("event", value)
+    when (event) {
+        is BLEProfiles.Event.OnMtuChanged -> {
+            broadcast.putExtra("size", event.size)
+        }
+        else -> {
+            // noop
+        }
+    }
     return broadcast
 }
 

@@ -29,6 +29,7 @@ import sp.ax.blegenerics.BLEProfilesReceivers
 import sp.ax.blegenerics.connect
 import sp.ax.blegenerics.disconnect
 import sp.ax.blegenerics.pair
+import sp.ax.blegenerics.requestMTU
 import sp.ax.blegenerics.services
 import sp.ax.blegenerics.states
 import sp.ax.blegenerics.unpair
@@ -77,6 +78,9 @@ internal fun DeviceScreen(
                 BLEProfiles.Event.OnServices -> {
                     context.showToast("on services discovered")
                 }
+                is BLEProfiles.Event.OnMtuChanged -> {
+                    context.showToast("on mtu changed: ${event.size}")
+                }
             }
         }
     }
@@ -100,17 +104,27 @@ internal fun DeviceScreen(
             BasicText(text = "$state")
             Spacer(Modifier.weight(1f)) // todo
             if (state is BLEGenerics.State.Connected) {
+                BasicText(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .clickable {
+                            BLEProfiles.requestMTU<DeviceService>(context = context, size = 200)
+                        }
+                        .wrapContentSize(),
+                    text = "request MTU 200",
+                )
+                BasicText(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .clickable {
+                            BLEProfiles.services<DeviceService>(context = context)
+                        }
+                        .wrapContentSize(),
+                    text = "services",
+                )
                 if (state.isPaired) {
-                    BasicText(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .clickable {
-                                BLEProfiles.services<DeviceService>(context = context)
-                            }
-                            .wrapContentSize(),
-                        text = "services",
-                    )
                     BasicText(
                         modifier = Modifier
                             .fillMaxWidth()
