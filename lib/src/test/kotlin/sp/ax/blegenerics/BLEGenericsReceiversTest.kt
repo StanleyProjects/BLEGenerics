@@ -60,7 +60,7 @@ internal class BLEGenericsReceiversTest {
                 BLEGenerics.Event.OnPairing(address = "address: ${++index}", isSuccess = false),
                 BLEGenerics.Event.OnPairing(address = "address: ${++index}", isSuccess = true),
             )
-            val job = launch(CoroutineName("states")) {
+            val job = launch(CoroutineName("events")) {
                 BLEGenericsReceivers.events(context = context).take(events.size).collectIndexed { index, actual ->
                     if (index !in events.indices) error("Index $index is unexpected!")
                     assertEquals(events[index], actual)
