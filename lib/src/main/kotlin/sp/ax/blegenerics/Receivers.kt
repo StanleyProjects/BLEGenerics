@@ -90,7 +90,7 @@ internal fun Context.getBroadcast(event: BLEProfiles.Event): Intent {
                 },
                 onFailure = { error ->
                     broadcast.putExtra("error", error)
-                }
+                },
             )
         }
         is BLEProfiles.Event.Characteristics.OnChange -> {
@@ -108,7 +108,7 @@ internal fun Context.getBroadcast(event: BLEProfiles.Event): Intent {
                 },
                 onFailure = { error ->
                     broadcast.putExtra("error", error)
-                }
+                },
             )
         }
     }

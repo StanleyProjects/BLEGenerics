@@ -5,7 +5,10 @@ import java.util.Objects
 import java.util.UUID
 
 private fun getHashCode(result: Result<ByteArray>): Int {
-    return result.fold({it.contentHashCode()}, {it.hashCode()})
+    return result.fold(
+        onSuccess = { it.contentHashCode() },
+        onFailure = { it.hashCode() },
+    )
 }
 
 private fun Result<ByteArray>.eq(other: Result<ByteArray>): Boolean {
@@ -37,8 +40,8 @@ interface BLEProfiles {
                     return when (other) {
                         is OnWrite -> {
                             service == other.service &&
-                                    characteristic == other.characteristic &&
-                                    result.eq(other.result)
+                                characteristic == other.characteristic &&
+                                result.eq(other.result)
                         }
                         else -> false
                     }
@@ -61,8 +64,8 @@ interface BLEProfiles {
                     return when (other) {
                         is OnChange -> {
                             service == other.service &&
-                            characteristic == other.characteristic &&
-                            bytes.contentEquals(other.bytes)
+                                characteristic == other.characteristic &&
+                                bytes.contentEquals(other.bytes)
                         }
                         else -> false
                     }
@@ -88,9 +91,9 @@ interface BLEProfiles {
                     return when (other) {
                         is OnWrite -> {
                             service == other.service &&
-                            characteristic == other.characteristic &&
-                            descriptor == other.descriptor &&
-                            result.eq(other.result)
+                                characteristic == other.characteristic &&
+                                descriptor == other.descriptor &&
+                                result.eq(other.result)
                         }
                         else -> false
                     }
@@ -125,8 +128,8 @@ interface BLEProfiles {
                     return when (other) {
                         is Write -> {
                             service == other.service &&
-                            characteristic == other.characteristic &&
-                            bytes.contentEquals(other.bytes)
+                                characteristic == other.characteristic &&
+                                bytes.contentEquals(other.bytes)
                         }
                         else -> false
                     }
@@ -152,9 +155,9 @@ interface BLEProfiles {
                     return when (other) {
                         is Write -> {
                             service == other.service &&
-                            characteristic == other.characteristic &&
-                            descriptor == other.descriptor &&
-                            bytes.contentEquals(other.bytes)
+                                characteristic == other.characteristic &&
+                                descriptor == other.descriptor &&
+                                bytes.contentEquals(other.bytes)
                         }
                         else -> false
                     }
