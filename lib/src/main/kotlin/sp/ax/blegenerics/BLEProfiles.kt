@@ -4,6 +4,20 @@ import kotlinx.coroutines.flow.SharedFlow
 import java.util.Objects
 import java.util.UUID
 
+private fun getHashCode(result: Result<ByteArray>): Int {
+    return result.fold({it.contentHashCode()}, {it.hashCode()})
+}
+
+private fun Result<ByteArray>.eq(other: Result<ByteArray>): Boolean {
+    if (isSuccess) {
+        if (other.isFailure) return false
+        return getOrThrow().contentEquals(other.getOrThrow())
+    } else {
+        if (other.isSuccess) return false
+        return exceptionOrNull() == other.exceptionOrNull()
+    }
+}
+
 interface BLEProfiles {
     sealed interface Event {
         data class OnServices(val characteristics: Map<UUID, Set<UUID>>) : Event
@@ -14,6 +28,54 @@ interface BLEProfiles {
                 val characteristic: UUID,
                 val value: Boolean,
             ) : Characteristics
+            class OnWrite(
+                val service: UUID,
+                val characteristic: UUID,
+                val result: Result<ByteArray>,
+            ) : Characteristics {
+                override fun equals(other: Any?): Boolean {
+                    return when (other) {
+                        is OnWrite -> {
+                            service == other.service &&
+                                    characteristic == other.characteristic &&
+                                    result.eq(other.result)
+                        }
+                        else -> false
+                    }
+                }
+
+                override fun hashCode(): Int {
+                    return Objects.hash(service, characteristic, getHashCode(result))
+                }
+
+                override fun toString(): String {
+                    return "Characteristics.OnWrite($service/$characteristic/, result: ${result.map { it.size }})"
+                }
+            }
+            class OnChange(
+                val service: UUID,
+                val characteristic: UUID,
+                val bytes: ByteArray,
+            ) : Characteristics {
+                override fun equals(other: Any?): Boolean {
+                    return when (other) {
+                        is OnChange -> {
+                            service == other.service &&
+                            characteristic == other.characteristic &&
+                            bytes.contentEquals(other.bytes)
+                        }
+                        else -> false
+                    }
+                }
+
+                override fun hashCode(): Int {
+                    return Objects.hash(service, characteristic, bytes.contentHashCode())
+                }
+
+                override fun toString(): String {
+                    return "Characteristics.OnChange($service/$characteristic, bytes: ${bytes.size})"
+                }
+            }
         }
         sealed interface Descriptors : Event {
             class OnWrite(
@@ -34,26 +96,12 @@ interface BLEProfiles {
                     }
                 }
 
-                private fun getHashCode(result: Result<ByteArray>): Int {
-                    return result.fold({it.contentHashCode()}, {it.hashCode()})
-                }
-
-                private fun Result<ByteArray>.eq(other: Result<ByteArray>): Boolean {
-                    if (isSuccess) {
-                        if (other.isFailure) return false
-                        return getOrThrow().contentEquals(other.getOrThrow())
-                    } else {
-                        if (other.isSuccess) return false
-                        return exceptionOrNull() == other.exceptionOrNull()
-                    }
-                }
-
                 override fun hashCode(): Int {
                     return Objects.hash(service, characteristic, descriptor, getHashCode(result))
                 }
 
                 override fun toString(): String {
-                    return "OnWrite($service/$characteristic/$descriptor, result: ${result.map { it.size }})"
+                    return "Descriptors.OnWrite($service/$characteristic/$descriptor, result: ${result.map { it.size }})"
                 }
             }
         }
@@ -68,6 +116,30 @@ interface BLEProfiles {
                 val characteristic: UUID,
                 val value: Boolean,
             ) : Characteristics
+            class Write(
+                val service: UUID,
+                val characteristic: UUID,
+                val bytes: ByteArray,
+            ) : Characteristics {
+                override fun equals(other: Any?): Boolean {
+                    return when (other) {
+                        is Write -> {
+                            service == other.service &&
+                            characteristic == other.characteristic &&
+                            bytes.contentEquals(other.bytes)
+                        }
+                        else -> false
+                    }
+                }
+
+                override fun hashCode(): Int {
+                    return Objects.hash(service, characteristic, bytes.contentHashCode())
+                }
+
+                override fun toString(): String {
+                    return "Characteristics.Write($service/$characteristic, bytes: ${bytes.size})"
+                }
+            }
         }
         sealed interface Descriptors : Operation {
             class Write(
@@ -93,7 +165,7 @@ interface BLEProfiles {
                 }
 
                 override fun toString(): String {
-                    return "Write($service/$characteristic/$descriptor, bytes: ${bytes.size})"
+                    return "Descriptors.Write($service/$characteristic/$descriptor, bytes: ${bytes.size})"
                 }
             }
         }

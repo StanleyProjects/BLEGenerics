@@ -29,6 +29,9 @@ internal class OperationParcelable(
 
     override fun writeToParcel(dest: Parcel, flags: Int) {
         when (delegate) {
+            BLEProfiles.Operation.Services -> {
+                dest.writeString("Services")
+            }
             is BLEProfiles.Operation.ChangeMTU -> {
                 dest.writeString("ChangeMTU")
                 dest.writeInt(delegate.value)
@@ -39,8 +42,12 @@ internal class OperationParcelable(
                 dest.writeString(delegate.characteristic.toString())
                 dest.writeInt(if (delegate.value) 1 else 0)
             }
-            BLEProfiles.Operation.Services -> {
-                dest.writeString("Services")
+            is BLEProfiles.Operation.Characteristics.Write -> {
+                dest.writeString("Characteristics.Write")
+                dest.writeString(delegate.service.toString())
+                dest.writeString(delegate.characteristic.toString())
+                dest.writeInt(delegate.bytes.size)
+                dest.writeByteArray(delegate.bytes)
             }
             is BLEProfiles.Operation.Descriptors.Write -> {
                 dest.writeString("Descriptors.Write")
@@ -83,6 +90,17 @@ internal class OperationParcelable(
                         service = service,
                         characteristic = characteristic,
                         descriptor = descriptor,
+                        bytes = bytes,
+                    )
+                }
+                "Characteristics.Write" -> {
+                    val service = UUID.fromString(parcel.readString()!!)
+                    val characteristic = UUID.fromString(parcel.readString()!!)
+                    val bytes = ByteArray(parcel.readInt())
+                    parcel.readByteArray(bytes)
+                    BLEProfiles.Operation.Characteristics.Write(
+                        service = service,
+                        characteristic = characteristic,
                         bytes = bytes,
                     )
                 }

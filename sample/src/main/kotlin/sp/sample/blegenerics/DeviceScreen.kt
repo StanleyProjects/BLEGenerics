@@ -95,6 +95,14 @@ internal fun DeviceScreen(
                 is BLEProfiles.Event.Characteristics.OnSetNotification -> {
                     context.showToast("on set notification: ${event.value}")
                 }
+                is BLEProfiles.Event.Characteristics.OnWrite -> {
+                    val message = "characteristic ${event.characteristic} write success: ${event.result.isSuccess}"
+                    println(message)
+                }
+                is BLEProfiles.Event.Characteristics.OnChange -> {
+                    val message = "characteristic ${event.characteristic} change bytes: ${event.bytes.size}"
+                    println(message)
+                }
                 is BLEProfiles.Event.Descriptors.OnWrite -> {
                     val message = "descriptor ${event.descriptor} write success: ${event.result.isSuccess}"
                     println(message)
@@ -137,7 +145,25 @@ internal fun DeviceScreen(
                         text = "services",
                     )
                 } else {
-                    val ops = 5
+                    BasicText(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .clickable {
+                                val service = UUID.fromString("00000000-cc7a-482a-984a-7f2ed5b3e58f") // todo
+                                val characteristic = UUID.fromString("00000000-8e22-4541-9d4c-21edae82ed19") // todo
+                                val bytes = ByteArray(18)
+                                bytes[0] = 0x01.toByte()
+                                val operation = BLEProfiles.Operation.Characteristics.Write(
+                                    service = service,
+                                    characteristic = characteristic,
+                                    bytes = bytes,
+                                )
+                                perform<DeviceService>(context = context, operation = operation)
+                            }
+                            .wrapContentSize(),
+                        text = "write characteristic",
+                    )
                     BasicText(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -152,13 +178,10 @@ internal fun DeviceScreen(
                                     descriptor = descriptor,
                                     bytes = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE,
                                 )
-                                (1..ops).forEach { number ->
-                                    println("perform #$number")
-                                    perform<DeviceService>(context = context, operation = operation)
-                                }
+                                perform<DeviceService>(context = context, operation = operation)
                             }
                             .wrapContentSize(),
-                        text = "write $ops descriptors",
+                        text = "write descriptor",
                     )
                     BasicText(
                         modifier = Modifier

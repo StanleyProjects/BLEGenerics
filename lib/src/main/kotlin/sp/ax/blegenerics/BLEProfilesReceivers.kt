@@ -38,6 +38,32 @@ object BLEProfilesReceivers {
                                 value = value,
                             )
                         }
+                        "Characteristics.OnWrite" -> {
+                            val service = intent.getStringExtra("service") ?: return
+                            val characteristic = intent.getStringExtra("characteristic") ?: return
+                            val result = when (val bytes = intent.getByteArrayExtra("bytes")) {
+                                null -> {
+                                    val error = intent.getSerializableExtra("error") as? Throwable ?: return
+                                    Result.failure(error)
+                                }
+                                else -> Result.success(bytes)
+                            }
+                            BLEProfiles.Event.Characteristics.OnWrite(
+                                service = UUID.fromString(service),
+                                characteristic = UUID.fromString(characteristic),
+                                result = result,
+                            )
+                        }
+                        "Characteristics.OnChange" -> {
+                            val service = intent.getStringExtra("service") ?: return
+                            val characteristic = intent.getStringExtra("characteristic") ?: return
+                            val bytes = intent.getByteArrayExtra("bytes") ?: return
+                            BLEProfiles.Event.Characteristics.OnChange(
+                                service = UUID.fromString(service),
+                                characteristic = UUID.fromString(characteristic),
+                                bytes = bytes,
+                            )
+                        }
                         "Descriptors.OnWrite" -> {
                             val service = intent.getStringExtra("service") ?: return
                             val characteristic = intent.getStringExtra("characteristic") ?: return

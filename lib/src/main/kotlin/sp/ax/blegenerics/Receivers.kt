@@ -62,6 +62,8 @@ internal fun Context.getBroadcast(event: BLEProfiles.Event): Intent {
         is BLEProfiles.Event.OnMtuChanged -> "OnMtuChanged"
         is BLEProfiles.Event.Characteristics.OnSetNotification -> "Characteristic.OnSetNotification"
         is BLEProfiles.Event.Descriptors.OnWrite -> "Descriptors.OnWrite"
+        is BLEProfiles.Event.Characteristics.OnWrite -> "Characteristics.OnWrite"
+        is BLEProfiles.Event.Characteristics.OnChange -> "Characteristics.OnChange"
     }
     broadcast.putExtra("event", value)
     when (event) {
@@ -78,6 +80,23 @@ internal fun Context.getBroadcast(event: BLEProfiles.Event): Intent {
             broadcast.putExtra("service", event.service.toString())
             broadcast.putExtra("characteristic", event.characteristic.toString())
             broadcast.putExtra("value", event.value)
+        }
+        is BLEProfiles.Event.Characteristics.OnWrite -> {
+            broadcast.putExtra("service", event.service.toString())
+            broadcast.putExtra("characteristic", event.characteristic.toString())
+            event.result.fold(
+                onSuccess = { bytes ->
+                    broadcast.putExtra("bytes", bytes)
+                },
+                onFailure = { error ->
+                    broadcast.putExtra("error", error)
+                }
+            )
+        }
+        is BLEProfiles.Event.Characteristics.OnChange -> {
+            broadcast.putExtra("service", event.service.toString())
+            broadcast.putExtra("characteristic", event.characteristic.toString())
+            broadcast.putExtra("bytes", event.bytes)
         }
         is BLEProfiles.Event.Descriptors.OnWrite -> {
             broadcast.putExtra("service", event.service.toString())
