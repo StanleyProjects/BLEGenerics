@@ -33,25 +33,22 @@ abstract class BLEGenericsService(
             nm.createNotificationChannel(channel)
         }
         coroutineScope.launch {
-            generics.states.drop(1).collect { state ->
-                sendBroadcast(getBroadcast(state = state))
-                when (state) {
-                    null -> {
-                        stopForeground(STOP_FOREGROUND_REMOVE)
-                        stopSelf()
+            var state: BLEGenerics.State? = null
+            generics.states.drop(1).collect { newState ->
+                val oldState = state
+                state = newState
+                sendBroadcast(getBroadcast(state = newState))
+                if (oldState == null && newState != null) {
+                    val notification = onStartForeground()
+                    nm.notify(N_ID, notification)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        startForeground(N_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+                    } else {
+                        startForeground(N_ID, notification)
                     }
-                    is BLEGenerics.State.Connecting -> {
-                        val notification = onStartForeground()
-                        nm.notify(N_ID, notification)
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                            startForeground(N_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
-                        } else {
-                            startForeground(N_ID, notification)
-                        }
-                    }
-                    else -> {
-                        // noop
-                    }
+                } else if (oldState != null && newState == null) {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
                 }
             }
         }
