@@ -6,10 +6,12 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.os.Build
 import android.os.IBinder
 import android.os.Parcelable
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlin.coroutines.CoroutineContext
@@ -17,13 +19,12 @@ import kotlin.coroutines.CoroutineContext
 abstract class BLEGenericsService(
     main: CoroutineContext,
     private val generics: BLEGenerics,
-    private val channel: NotificationChannel,
+    protected val channel: NotificationChannel,
 ) : Service() {
     private val job = SupervisorJob()
-    private val coroutineScope = CoroutineScope(main + job)
+    protected val coroutineScope = CoroutineScope(main + job)
     private val N_ID: Int = System.currentTimeMillis().toInt()
-
-    protected abstract fun onStateNotification(channel: NotificationChannel, state: BLEGenerics.State?): Notification
+    protected val states: StateFlow<BLEGenerics.State?> get() = generics.states
 
     override fun onCreate() {
         super.onCreate()
@@ -32,16 +33,22 @@ abstract class BLEGenericsService(
             nm.createNotificationChannel(channel)
         }
         coroutineScope.launch {
-            generics.states.drop(1).collect { state ->
-                sendBroadcast(getBroadcast(state = state))
-                when (state) {
-                    null -> stopSelf()
-                    is BLEGenerics.State.Disconnecting -> stopForeground(STOP_FOREGROUND_REMOVE)
-                    else -> {
-                        val notification = onStateNotification(channel = channel, state = state)
-                        nm.notify(N_ID, notification)
+            var state: BLEGenerics.State? = null
+            generics.states.drop(1).collect { newState ->
+                val oldState = state
+                state = newState
+                sendBroadcast(getBroadcast(state = newState))
+                if (oldState == null && newState != null) {
+                    val notification = onStartForeground()
+                    nm.notify(N_ID, notification)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         startForeground(N_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+                    } else {
+                        startForeground(N_ID, notification)
                     }
+                } else if (oldState != null && newState == null) {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
                 }
             }
         }
@@ -93,6 +100,14 @@ abstract class BLEGenericsService(
     override fun onDestroy() {
         super.onDestroy()
         job.cancel()
+    }
+
+    protected abstract fun onStartForeground(): Notification
+
+    protected fun notify(notification: Notification) {
+        if (generics.states.value == null) return
+        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        nm.notify(N_ID, notification)
     }
 
     companion object {

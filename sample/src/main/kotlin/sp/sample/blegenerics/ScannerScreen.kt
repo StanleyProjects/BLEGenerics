@@ -14,11 +14,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -35,11 +37,10 @@ import sp.ax.blescanner.stop
 internal fun ScannerScreen(
     onSelectDevice: (BLEDevice) -> Unit,
 ) {
+    val themeState = App.flows.themes.collectAsState().value
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    val state = remember { BLEScannerReceivers.states(context = context) }
-        .collectAsStateWithLifecycle(null, minActiveState = Lifecycle.State.RESUMED)
-        .value
+    val state = App.scanner.states.collectAsState().value
     val _devices = remember { mutableStateOf(emptyList<BLEDevice>()) }
     LaunchedEffect(Unit) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -53,13 +54,16 @@ internal fun ScannerScreen(
     }
     LaunchedEffect(Unit) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            states<ScannerService>(context = context)
+            BLEScannerReceivers.errors(context = context).collect { error ->
+                println("[ScannerScreen]:error: $error") // todo
+                context.showToast("error: $error")
+            }
         }
     }
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.LightGray),
+            .background(themeState.background),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             LazyColumn(
@@ -82,6 +86,7 @@ internal fun ScannerScreen(
                                 }
                                 .wrapContentHeight(),
                             text = text,
+                            style = TextStyle(color = themeState.text),
                         )
                     }
                 }
@@ -96,6 +101,7 @@ internal fun ScannerScreen(
                         }
                         .wrapContentSize(),
                     text = "clear",
+                    style = TextStyle(color = themeState.text),
                 )
             }
             val enabled = state == BLEScanner.State.Started || state == BLEScanner.State.Stopped
@@ -119,6 +125,7 @@ internal fun ScannerScreen(
                     }
                     .wrapContentSize(),
                 text = text,
+                style = TextStyle(color = themeState.text),
             )
         }
     }

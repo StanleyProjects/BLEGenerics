@@ -4,8 +4,8 @@ import android.app.Application
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
 import sp.ax.blegenerics.BLEGenerics
-import sp.ax.blegenerics.BLEGenericsLogger
 import sp.ax.blegenerics.RealBLEGenerics
 import sp.ax.blescanner.BLEScanner
 import sp.ax.blescanner.RealBLEScanner
@@ -25,12 +25,13 @@ internal class App : Application() {
             coroutineScope = CoroutineScope(Dispatchers.Main + job),
             default = Dispatchers.Default,
             context = this,
-            logger = FinalBLEGenericsLogger(
-                tag = "[BLEGenerics]",
-                level = BLEGenericsLogger.Level.Info,
-            ),
+            logger = FinalBLEGenericsLogger(tag = "[BLEGenerics]"),
         )
         _locals = FinalLocals(context = this)
+        _flows = Flows(
+            themes = MutableStateFlow(ThemeState.Light),
+            devices = MutableStateFlow(locals.selectedDevice),
+        )
     }
 
     companion object {
@@ -40,5 +41,7 @@ internal class App : Application() {
         val generics: BLEGenerics get() = checkNotNull(_generics) { "No generics!" }
         private var _locals: Locals? = null
         val locals: Locals get() = checkNotNull(_locals) { "No locals!" }
+        private var _flows: Flows? = null
+        val flows: Flows get() = checkNotNull(_flows) { "No flows!" }
     }
 }

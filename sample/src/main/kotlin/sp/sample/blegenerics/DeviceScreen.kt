@@ -13,11 +13,13 @@ import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -42,22 +44,12 @@ internal fun DeviceScreen(
     device: BLEDevice,
     onDisconnect: () -> Unit,
 ) {
+    val themeState = App.flows.themes.collectAsState().value
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    val state = remember { BLEGenericsReceivers.states(context = context) }
-        .collectAsStateWithLifecycle(null, minActiveState = Lifecycle.State.RESUMED)
-        .value
+    val state = App.generics.states.collectAsState().value
     LaunchedEffect(Unit) {
-        BLEGenericsReceivers.states(context = context).take(1).collect { state ->
-            if (state == null) {
-                connect<DeviceService>(context = context, address = device.address)
-            }
-        }
-    }
-    LaunchedEffect(Unit) {
-        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            states<DeviceService>(context = context)
-        }
+        if (state == null) connect<DeviceService>(context = context, address = device.address)
     }
     LaunchedEffect(Unit) {
         BLEGenericsReceivers.events(context = context).collect { event ->
@@ -114,7 +106,7 @@ internal fun DeviceScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.White),
+            .background(themeState.background),
     ) {
         Column(Modifier.fillMaxSize()) {
             val text = """
@@ -127,8 +119,14 @@ internal fun DeviceScreen(
                 is BLEGenerics.State.Waiting -> true
                 else -> false
             }
-            BasicText(text = text)
-            BasicText(text = "$state")
+            BasicText(
+                text = text,
+                style = TextStyle(color = themeState.text),
+            )
+            BasicText(
+                text = "$state",
+                style = TextStyle(color = themeState.text),
+            )
             Spacer(Modifier.weight(1f)) // todo
             if (state is BLEGenerics.State.Connected) {
                 val characteristics = discovered.value
@@ -143,6 +141,7 @@ internal fun DeviceScreen(
                             }
                             .wrapContentSize(),
                         text = "services",
+                        style = TextStyle(color = themeState.text),
                     )
                 } else {
                     BasicText(
@@ -163,6 +162,7 @@ internal fun DeviceScreen(
                             }
                             .wrapContentSize(),
                         text = "write characteristic",
+                        style = TextStyle(color = themeState.text),
                     )
                     BasicText(
                         modifier = Modifier
@@ -182,6 +182,7 @@ internal fun DeviceScreen(
                             }
                             .wrapContentSize(),
                         text = "write descriptor",
+                        style = TextStyle(color = themeState.text),
                     )
                     BasicText(
                         modifier = Modifier
@@ -199,6 +200,7 @@ internal fun DeviceScreen(
                             }
                             .wrapContentSize(),
                         text = "set notification true",
+                        style = TextStyle(color = themeState.text),
                     )
                     BasicText(
                         modifier = Modifier
@@ -210,6 +212,7 @@ internal fun DeviceScreen(
                             }
                             .wrapContentSize(),
                         text = "change MTU 200",
+                        style = TextStyle(color = themeState.text),
                     )
                 }
                 if (state.isPaired) {
@@ -222,6 +225,7 @@ internal fun DeviceScreen(
                             }
                             .wrapContentSize(),
                         text = "unpair",
+                        style = TextStyle(color = themeState.text),
                     )
                 } else {
                     val pin = "000000"
@@ -234,6 +238,7 @@ internal fun DeviceScreen(
                             }
                             .wrapContentSize(),
                         text = "pair: $pin",
+                        style = TextStyle(color = themeState.text),
                     )
                 }
             }
@@ -247,6 +252,7 @@ internal fun DeviceScreen(
                     }
                     .wrapContentSize(),
                 text = "disconnect",
+                style = TextStyle(color = themeState.text),
             )
         }
     }
