@@ -76,6 +76,67 @@ internal class BLEGenericsServiceTest {
 
     @Config(application = MockApplication::class, sdk = [Build.VERSION_CODES.P, Build.VERSION_CODES.TIRAMISU])
     @Test
+    fun statesTest() {
+        runTest(timeout = 6.seconds) {
+            onMockGenerics { generics ->
+                val application = RuntimeEnvironment.getApplication()
+                onService<MockGenericsService>(generics = generics, application = application) { context, controller, intent ->
+                    val address = "foobarbaz"
+                    assertNull("before connect", generics.states.value)
+                    launch(CoroutineName("states")) {
+                        BLEGenericsReceivers.states(context = context).take(1).collectIndexed { index, state ->
+                            when (index) {
+                                0 -> assertNull(state)
+                                else -> error("Index $index is unexpected!")
+                            }
+                        }
+                    }.join {
+                        intent.action = BLEGenericsService.BLEGenericsStatesAction
+                        controller.startCommand(intent)
+                    }
+                    launch(CoroutineName("connect")) {
+                        BLEGenericsReceivers.states(context = context).take(2).collectIndexed { index, state ->
+                            when (index) {
+                                0 -> {
+                                    check(state is BLEGenerics.State.Connecting)
+                                    assertEquals(address, state.address)
+                                }
+                                1 -> {
+                                    check(state is BLEGenerics.State.Connected)
+                                    assertEquals(address, state.address)
+                                    assertFalse(state.isPaired)
+                                }
+                                else -> error("Index $index is unexpected!")
+                            }
+                        }
+                    }.join {
+                        intent.action = BLEGenericsService.BLEGenericsConnectAction
+                        intent.putExtra("address", address)
+                        controller.startCommand(intent)
+                    }
+                    assertTrue("after connect", generics.states.value is BLEGenerics.State.Connected)
+                    launch(CoroutineName("states")) {
+                        BLEGenericsReceivers.states(context = context).take(1).collectIndexed { index, state ->
+                            when (index) {
+                                0 -> {
+                                    check(state is BLEGenerics.State.Connected)
+                                    assertEquals(address, state.address)
+                                    assertFalse(state.isPaired)
+                                }
+                                else -> error("Index $index is unexpected!")
+                            }
+                        }
+                    }.join {
+                        intent.action = BLEGenericsService.BLEGenericsStatesAction
+                        controller.startCommand(intent)
+                    }
+                }
+            }
+        }
+    }
+
+    @Config(application = MockApplication::class, sdk = [Build.VERSION_CODES.P, Build.VERSION_CODES.TIRAMISU])
+    @Test
     fun connectTest() {
         runTest(timeout = 6.seconds) {
             onMockGenerics { generics ->
