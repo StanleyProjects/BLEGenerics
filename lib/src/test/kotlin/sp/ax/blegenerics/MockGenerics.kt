@@ -35,7 +35,8 @@ internal class MockGenerics(
     override fun connect(address: String) {
         coroutineScope.launch(CoroutineName("MockGenerics:connect")) {
             withContext(default) {
-                if (_states.value != null) TODO("MockGenerics:connect($address):state: ${_states.value}")
+                val state = _states.value
+                if (state != null) TODO("MockGenerics:connect($address):state: $state")
                 _states.value = BLEGenerics.State.Connecting(address = address)
                 delay(1.seconds)
                 _states.value = BLEGenerics.State.Connected(address = address, isPaired = false)
@@ -44,7 +45,15 @@ internal class MockGenerics(
     }
 
     override fun disconnect() {
-        TODO("Not yet implemented: disconnect")
+        coroutineScope.launch(CoroutineName("MockGenerics:disconnect")) {
+            withContext(default) {
+                val state = _states.value
+                if (state == null) TODO("MockGenerics:disconnect:no state")
+                _states.value = BLEGenerics.State.Disconnecting(address = state.address)
+                delay(1.seconds)
+                _states.value = null
+            }
+        }
     }
 
     override fun pair(pin: String?) {
