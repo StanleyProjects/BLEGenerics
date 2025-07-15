@@ -5,7 +5,7 @@ repositories {
     google()
     mavenCentral()
     maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
-    maven("https://s01.oss.sonatype.org/content/repositories/snapshots")
+    maven("https://central.sonatype.com/repository/maven-snapshots/")
 }
 
 plugins {
@@ -66,6 +66,6 @@ dependencies {
     implementation(project(":lib"))
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation(compose.foundation)
-    implementation("com.github.kepocnhh:BLEScanner:0.1.3u-SNAPSHOT")
+    implementation("com.github.kepocnhh:BLEScanner:0.2.0u-SNAPSHOT")
     implementation("com.github.kepocnhh:ComposeClicks:0.3.0u-SNAPSHOT")
 }

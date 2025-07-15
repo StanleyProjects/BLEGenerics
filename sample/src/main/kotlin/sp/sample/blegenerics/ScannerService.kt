@@ -19,7 +19,7 @@ internal class ScannerService : BLEScannerService(
         NotificationManager.IMPORTANCE_HIGH,
     ),
 ) {
-    override fun onStartNotification(channel: NotificationChannel): Notification {
+    override fun onStartNotification(): Notification {
         val context: Context = this
         val intent = Intent(context, ScannerService::class.java)
         intent.action = BLEScannerStopAction
