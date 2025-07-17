@@ -68,7 +68,7 @@ internal class BLEGenericsServiceTest {
         withIntent(intent).startCommand(flags, startId)
     }
 
-    internal suspend fun Job.join(delay: Duration = 1.seconds, preJoin: suspend () -> Unit) {
+    private suspend fun Job.join(delay: Duration = 1.seconds, preJoin: suspend () -> Unit) {
         delay(delay)
         preJoin()
         join()

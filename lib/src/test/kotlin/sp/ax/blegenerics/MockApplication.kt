@@ -19,10 +19,12 @@ internal class MockApplication : Application() {
         flags: Int,
     ): Intent? {
         if (filter == null) TODO("MockApplication:registerReceiver($flags):no filter!")
-        if (filter.countActions() != 1) TODO("MockApplication:registerReceiver($flags):${filter.countActions()} actions!")
-        val action = filter.actionsIterator().next()
+//        if (filter.countActions() != 1) TODO("MockApplication:registerReceiver($flags):${filter.countActions()} actions!")
+        if (filter.countActions() == 0) TODO("MockApplication:registerReceiver($flags):${filter.countActions()} actions!")
+//        val action = filter.actionsIterator().next()
+        val key = filter.actionsIterator().asSequence().joinToString { it }
         if (receiver == null) TODO("MockApplication:registerReceiver($flags):no receiver!")
-        receivers[action] = receiver
+        receivers[key] = receiver
         return null
     }
 
@@ -31,10 +33,12 @@ internal class MockApplication : Application() {
         filter: IntentFilter?,
     ): Intent? {
         if (filter == null) TODO("MockApplication:registerReceiver:no filter!")
-        if (filter.countActions() != 1) TODO("MockApplication:registerReceiver:${filter.countActions()} actions!")
-        val action = filter.actionsIterator().next()
+//        if (filter.countActions() != 1) TODO("MockApplication:registerReceiver:${filter.countActions()} actions!")
+        if (filter.countActions() == 0) TODO("MockApplication:registerReceiver:${filter.countActions()} actions!")
+//        val action = filter.actionsIterator().next()
+        val key = filter.actionsIterator().asSequence().joinToString { it }
         if (receiver == null) TODO("MockApplication:registerReceiver:no receiver!")
-        receivers[action] = receiver
+        receivers[key] = receiver
         return null
     }
 
