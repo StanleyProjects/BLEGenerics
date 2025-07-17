@@ -119,12 +119,13 @@ internal fun register(
     context: Context,
     receivers: BroadcastReceiver,
     filters: IntentFilter,
+    exported: Boolean = false,
 ) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         context.registerReceiver(
             receivers,
             filters,
-            Context.RECEIVER_NOT_EXPORTED,
+            if (exported) Context.RECEIVER_EXPORTED else Context.RECEIVER_NOT_EXPORTED,
         )
     } else {
         context.registerReceiver(receivers, filters)

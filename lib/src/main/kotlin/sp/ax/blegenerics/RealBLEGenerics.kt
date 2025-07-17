@@ -299,7 +299,7 @@ class RealBLEGenerics(
     }
 
     private val receivers = object : BroadcastReceiver() {
-        private suspend fun onReceive(intent: Intent) {
+        private fun onReceive(intent: Intent) {
             when (intent.action) {
                 BluetoothAdapter.ACTION_STATE_CHANGED -> {
                     val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
@@ -363,20 +363,6 @@ class RealBLEGenerics(
         it.priority = IntentFilter.SYSTEM_HIGH_PRIORITY
         it.addAction(BluetoothDevice.ACTION_PAIRING_REQUEST)
     }
-
-//    private fun getPairingErrorOrNull(reason: Int): PairException.Error? {
-//        val UNBOND_REASON_AUTH_FAILED = 1
-//        val UNBOND_REASON_AUTH_REJECTED = 2
-//        val UNBOND_REASON_AUTH_CANCELED = 3
-//        val UNBOND_REASON_REMOVED = 9
-//        return when (reason) {
-//            UNBOND_REASON_AUTH_FAILED -> PairException.Error.FAILED
-//            UNBOND_REASON_AUTH_REJECTED -> PairException.Error.REJECTED
-//            UNBOND_REASON_AUTH_CANCELED -> PairException.Error.CANCELED
-//            UNBOND_REASON_REMOVED -> PairException.Error.REMOVED
-//            else -> null
-//        }
-//    }
 
     private val receiversConnected = object : BroadcastReceiver() {
         private suspend fun onReceive(intent: Intent) {
@@ -633,7 +619,7 @@ class RealBLEGenerics(
                     }
                     if (newState is InternalState.Connected && newState.status is ConnectedStatus.Pairing) {
                         if (oldState !is InternalState.Connected || oldState.status !is ConnectedStatus.Pairing) {
-                            register(context, receiversPairing, intentFiltersPairing)
+                            register(context, receiversPairing, intentFiltersPairing, exported = true)
                             try {
                                 onPairing(address = newState.address)
                             } catch (error: Throwable) {
@@ -674,7 +660,7 @@ class RealBLEGenerics(
                         }
                     }
                     if (newState is InternalState.Connected && newState > oldState) {
-                        register(context, receiversConnected, intentFiltersConnected)
+                        register(context, receiversConnected, intentFiltersConnected, exported = true)
                     } else if (oldState is InternalState.Connected && oldState > newState) {
                         context.unregisterReceiver(receiversConnected)
                         try {
