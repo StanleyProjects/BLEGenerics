@@ -679,14 +679,14 @@ class RealBLEGenerics(
                             val timeDelay = 250.milliseconds
                             logger.info("searching start: ${Date(scanCallback.timeStart.inWholeMilliseconds)}")
                             while (true) {
-                                val state = _states.value
-                                if (state !is InternalState.Searching) break
+                                val actual = _states.value
+                                if (actual !is InternalState.Searching) break
                                 val timeNow = now()
                                 val fromStart = timeNow - scanCallback.timeStart
                                 val fromLast = timeNow - scanCallback.timeLastResult
                                 if (fromStart > 16.seconds || fromLast > 4.seconds) {
                                     logger.warning("searching timeout...")
-                                    _states.value = InternalState.Waiting(address = state.address)
+                                    _states.value = InternalState.Waiting(address = actual.address)
                                     break
                                 }
                                 delay(timeDelay)
