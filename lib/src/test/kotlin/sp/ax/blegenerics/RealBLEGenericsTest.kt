@@ -2,7 +2,6 @@ package sp.ax.blegenerics
 
 import android.Manifest
 import android.bluetooth.BluetoothGatt
-import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.pm.PackageManager
@@ -28,8 +27,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows
 import org.robolectric.annotation.Config
-import org.robolectric.shadows.ShadowBluetoothDevice
-import org.robolectric.shadows.ShadowBluetoothGatt
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.seconds
 
