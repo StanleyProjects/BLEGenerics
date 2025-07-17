@@ -1,7 +1,8 @@
 package sp.ax.blegenerics
 
 import android.Manifest
-import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.pm.PackageManager
@@ -10,7 +11,6 @@ import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collectIndexed
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -28,6 +28,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowBluetoothDevice
+import org.robolectric.shadows.ShadowBluetoothGatt
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.seconds
 
@@ -172,6 +174,10 @@ internal class RealBLEGenericsTest {
                             1 -> {
                                 check(state is BLEGenerics.State.Connecting) { "$index] state: $state" }
                                 assertEquals(address, state.address)
+                                val device = bm.adapter.getRemoteDevice(address) ?: error("No device!")
+                                val gatt = Shadows.shadowOf(device).bluetoothGatts.single() ?: error("No gatt!")
+                                val callback = Shadows.shadowOf(gatt).gattCallback ?: error("No callback!")
+                                callback.onConnectionStateChange(gatt, BluetoothGatt.GATT_SUCCESS, BluetoothGatt.STATE_CONNECTED)
                             }
                             2 -> {
                                 check(state is BLEGenerics.State.Connected) { "$index] state: $state" }
@@ -184,7 +190,6 @@ internal class RealBLEGenericsTest {
                 }
                 generics.connect(address = address)
                 job.join()
-                TODO("after connect")
                 assertTrue("after connect", generics.states.value is BLEGenerics.State.Connected)
                 job = launch(CoroutineName("states")) {
                     generics.states.take(1).collectIndexed { index, state ->
