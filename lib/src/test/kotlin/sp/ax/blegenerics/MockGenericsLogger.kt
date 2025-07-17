@@ -2,14 +2,14 @@ package sp.ax.blegenerics
 
 internal class MockGenericsLogger : BLEGenericsLogger {
     override fun warning(message: String) {
-        // noop
+        println("[warning] $message")
     }
 
     override fun debug(message: String) {
-        // noop
+        println("[debug] $message")
     }
 
     override fun info(message: String) {
-        // noop
+        println("[info] $message")
     }
 }
