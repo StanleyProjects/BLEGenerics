@@ -2,6 +2,9 @@ package sp.ax.blegenerics
 
 import android.Manifest
 import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothGattDescriptor
+import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.pm.PackageManager
@@ -27,6 +30,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows
 import org.robolectric.annotation.Config
+import java.util.UUID
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.seconds
 
@@ -200,6 +204,284 @@ internal class RealBLEGenericsTest {
                         }
                     }
                 }
+                job.join()
+            }
+        }
+    }
+
+    @Config(application = MockApplication::class, sdk = [Build.VERSION_CODES.P, Build.VERSION_CODES.TIRAMISU])
+    @Test
+    fun servicesTest() = runBlocking {
+        withTimeout(6.seconds) {
+            val application = RuntimeEnvironment.getApplication()
+            val context: Context = application
+            //
+            val bm = context.getSystemService(BluetoothManager::class.java)
+            check(bm.adapter.enable())
+            check(bm.adapter.isEnabled)
+            //
+            val shadow = Shadows.shadowOf(application)
+            shadow.grantPermissions(Manifest.permission.ACCESS_FINE_LOCATION)
+            check(application.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED)
+            shadow.grantPermissions(Manifest.permission.BLUETOOTH_SCAN)
+            check(application.checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED)
+            //
+            onRealBLEGenerics(
+                main = coroutineContext,
+                context = context,
+            ) { generics ->
+                val address = "00:00:00:00:00:00"
+                assertNull("before connect", generics.states.value)
+                var job = launch(CoroutineName("connect")) {
+                    generics.states.take(3).collectIndexed { index, state ->
+                        println("$index] $state") // todo
+                        when (index) {
+                            0 -> assertNull(state)
+                            1 -> {
+                                check(state is BLEGenerics.State.Connecting) { "$index] state: $state" }
+                                assertEquals(address, state.address)
+                                val device = bm.adapter.getRemoteDevice(address) ?: error("No device!")
+                                val gatt = Shadows.shadowOf(device).bluetoothGatts.single() ?: error("No gatt!")
+                                val callback = Shadows.shadowOf(gatt).gattCallback ?: error("No callback!")
+                                callback.onConnectionStateChange(gatt, BluetoothGatt.GATT_SUCCESS, BluetoothGatt.STATE_CONNECTED)
+                            }
+                            2 -> {
+                                check(state is BLEGenerics.State.Connected) { "$index] state: $state" }
+                                assertEquals(address, state.address)
+                                assertFalse(state.isPaired)
+                            }
+                            else -> error("Index $index is unexpected!")
+                        }
+                    }
+                }
+                generics.connect(address = address)
+                job.join()
+                assertTrue("after connect", generics.states.value is BLEGenerics.State.Connected)
+                val expected = BluetoothGattService(UUID(0, 1), BluetoothGattService.SERVICE_TYPE_PRIMARY)
+                job = launch(CoroutineName("services")) {
+                    generics.profiles.events.take(1).collectIndexed { index, event ->
+                        when (index) {
+                            0 -> {
+                                check(event is BLEProfiles.Event.OnServices)
+                                assertEquals(expected.uuid, event.characteristics.keys.single())
+                            }
+                            else -> error("Index $index is unexpected!")
+                        }
+                    }
+                }
+                val device = bm.adapter.getRemoteDevice(address) ?: error("No device!")
+                val gatt = Shadows.shadowOf(device).bluetoothGatts.single() ?: error("No gatt!")
+                Shadows.shadowOf(gatt).addDiscoverableService(expected)
+                val operation = BLEProfiles.Operation.Services
+                generics.profiles.perform(operation = operation)
+                job.join()
+            }
+        }
+    }
+
+    @Config(application = MockApplication::class, sdk = [Build.VERSION_CODES.P, Build.VERSION_CODES.TIRAMISU])
+    @Test
+    fun descriptorsTest() = runBlocking {
+        withTimeout(6.seconds) {
+            val application = RuntimeEnvironment.getApplication()
+            val context: Context = application
+            //
+            val bm = context.getSystemService(BluetoothManager::class.java)
+            check(bm.adapter.enable())
+            check(bm.adapter.isEnabled)
+            //
+            val shadow = Shadows.shadowOf(application)
+            shadow.grantPermissions(Manifest.permission.ACCESS_FINE_LOCATION)
+            check(application.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED)
+            shadow.grantPermissions(Manifest.permission.BLUETOOTH_SCAN)
+            check(application.checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED)
+            //
+            onRealBLEGenerics(
+                main = coroutineContext,
+                context = context,
+            ) { generics ->
+                val address = "00:00:00:00:00:00"
+                assertNull("before connect", generics.states.value)
+                var job = launch(CoroutineName("connect")) {
+                    generics.states.take(3).collectIndexed { index, state ->
+                        println("$index] $state") // todo
+                        when (index) {
+                            0 -> assertNull(state)
+                            1 -> {
+                                check(state is BLEGenerics.State.Connecting) { "$index] state: $state" }
+                                assertEquals(address, state.address)
+                                val device = bm.adapter.getRemoteDevice(address) ?: error("No device!")
+                                val gatt = Shadows.shadowOf(device).bluetoothGatts.single() ?: error("No gatt!")
+                                val callback = Shadows.shadowOf(gatt).gattCallback ?: error("No callback!")
+                                callback.onConnectionStateChange(gatt, BluetoothGatt.GATT_SUCCESS, BluetoothGatt.STATE_CONNECTED)
+                            }
+                            2 -> {
+                                check(state is BLEGenerics.State.Connected) { "$index] state: $state" }
+                                assertEquals(address, state.address)
+                                assertFalse(state.isPaired)
+                            }
+                            else -> error("Index $index is unexpected!")
+                        }
+                    }
+                }
+                generics.connect(address = address)
+                job.join()
+                assertTrue("after connect", generics.states.value is BLEGenerics.State.Connected)
+                val device = bm.adapter.getRemoteDevice(address) ?: error("No device!")
+                val gatt = Shadows.shadowOf(device).bluetoothGatts.single() ?: error("No gatt!")
+                val service = BluetoothGattService(UUID(0, 1), BluetoothGattService.SERVICE_TYPE_PRIMARY)
+                Shadows.shadowOf(gatt).addDiscoverableService(service)
+                val characteristic = BluetoothGattCharacteristic(UUID(1, 1), 0, 0)
+                service.addCharacteristic(characteristic)
+                val descriptor = BluetoothGattDescriptor(UUID(1, 1), 0)
+                characteristic.addDescriptor(descriptor)
+                val expected = "foobarbaz".toByteArray()
+                job = launch(CoroutineName("services")) {
+                    generics.profiles.events.take(2).collectIndexed { index, event ->
+                        when (index) {
+                            0 -> {
+                                check(event is BLEProfiles.Event.OnServices)
+                                assertEquals(service.uuid, event.characteristics.keys.single())
+                                assertEquals(characteristic.uuid, event.characteristics.entries.single().value.single())
+                                val operation = BLEProfiles.Operation.Descriptors.Write(
+                                    service = service.uuid,
+                                    characteristic = characteristic.uuid,
+                                    descriptor = descriptor.uuid,
+                                    bytes = expected,
+                                )
+                                generics.profiles.perform(operation = operation)
+                            }
+                            1 -> {
+                                check(event is BLEProfiles.Event.Descriptors.OnWrite)
+                                assertEquals(service.uuid, event.service)
+                                assertEquals(characteristic.uuid, event.characteristic)
+                                assertEquals(descriptor.uuid, event.descriptor)
+                                assertTrue(event.result.isSuccess)
+                                val actual = checkNotNull(event.result.getOrNull())
+                                assertTrue(expected.contentEquals(actual))
+                            }
+                            else -> error("Index $index is unexpected!")
+                        }
+                    }
+                }
+                generics.profiles.perform(operation = BLEProfiles.Operation.Services)
+                job.join()
+            }
+        }
+    }
+
+    @Config(application = MockApplication::class, sdk = [Build.VERSION_CODES.P, Build.VERSION_CODES.TIRAMISU])
+    @Test
+    fun descriptorsFailureTest() = runBlocking {
+        withTimeout(6.seconds) {
+            val application = RuntimeEnvironment.getApplication()
+            val context: Context = application
+            //
+            val bm = context.getSystemService(BluetoothManager::class.java)
+            check(bm.adapter.enable())
+            check(bm.adapter.isEnabled)
+            //
+            val shadow = Shadows.shadowOf(application)
+            shadow.grantPermissions(Manifest.permission.ACCESS_FINE_LOCATION)
+            check(application.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED)
+            shadow.grantPermissions(Manifest.permission.BLUETOOTH_SCAN)
+            check(application.checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED)
+            //
+            onRealBLEGenerics(
+                main = coroutineContext,
+                context = context,
+            ) { generics ->
+                val address = "00:00:00:00:00:00"
+                assertNull("before connect", generics.states.value)
+                var job = launch(CoroutineName("connect")) {
+                    generics.states.take(3).collectIndexed { index, state ->
+                        println("$index] $state") // todo
+                        when (index) {
+                            0 -> assertNull(state)
+                            1 -> {
+                                check(state is BLEGenerics.State.Connecting) { "$index] state: $state" }
+                                assertEquals(address, state.address)
+                                val device = bm.adapter.getRemoteDevice(address) ?: error("No device!")
+                                val gatt = Shadows.shadowOf(device).bluetoothGatts.single() ?: error("No gatt!")
+                                val callback = Shadows.shadowOf(gatt).gattCallback ?: error("No callback!")
+                                callback.onConnectionStateChange(gatt, BluetoothGatt.GATT_SUCCESS, BluetoothGatt.STATE_CONNECTED)
+                            }
+                            2 -> {
+                                check(state is BLEGenerics.State.Connected) { "$index] state: $state" }
+                                assertEquals(address, state.address)
+                                assertFalse(state.isPaired)
+                            }
+                            else -> error("Index $index is unexpected!")
+                        }
+                    }
+                }
+                generics.connect(address = address)
+                job.join()
+                assertTrue("after connect", generics.states.value is BLEGenerics.State.Connected)
+                val device = bm.adapter.getRemoteDevice(address) ?: error("No device!")
+                val gatt = Shadows.shadowOf(device).bluetoothGatts.single() ?: error("No gatt!")
+                val service = BluetoothGattService(UUID(0, 1), BluetoothGattService.SERVICE_TYPE_PRIMARY)
+                val characteristic = BluetoothGattCharacteristic(UUID(1, 1), 0, 0)
+                val descriptor = BluetoothGattDescriptor(UUID(1, 1), 0)
+                val expected = "foobarbaz".toByteArray()
+                check(gatt.services.isEmpty())
+                val operation = BLEProfiles.Operation.Descriptors.Write(
+                    service = service.uuid,
+                    characteristic = characteristic.uuid,
+                    descriptor = descriptor.uuid,
+                    bytes = expected,
+                )
+                job = launch(CoroutineName("descriptors")) {
+                    generics.profiles.events.take(5).collectIndexed { index, event ->
+                        when (index) {
+                            0 -> {
+                                check(event is BLEProfiles.Event.Descriptors.OnWrite)
+                                assertEquals(service.uuid, event.service)
+                                assertEquals(characteristic.uuid, event.characteristic)
+                                assertEquals(descriptor.uuid, event.descriptor)
+                                assertTrue(event.result.isFailure)
+                                val actual = checkNotNull(event.result.exceptionOrNull())
+                                assertTrue(actual is IllegalStateException)
+                                assertEquals("No service ${service.uuid}!", actual.message)
+                                Shadows.shadowOf(gatt).addDiscoverableService(service)
+                                generics.profiles.perform(operation = BLEProfiles.Operation.Services)
+                            }
+                            1 -> {
+                                check(event is BLEProfiles.Event.OnServices)
+                                generics.profiles.perform(operation = operation)
+                            }
+                            2 -> {
+                                check(event is BLEProfiles.Event.Descriptors.OnWrite)
+                                assertEquals(service.uuid, event.service)
+                                assertEquals(characteristic.uuid, event.characteristic)
+                                assertEquals(descriptor.uuid, event.descriptor)
+                                assertTrue(event.result.isFailure)
+                                val actual = checkNotNull(event.result.exceptionOrNull())
+                                assertTrue(actual is IllegalStateException)
+                                assertEquals("No characteristic ${characteristic.uuid}!", actual.message)
+                                service.addCharacteristic(characteristic)
+                                Shadows.shadowOf(gatt).addDiscoverableService(service)
+                                generics.profiles.perform(operation = BLEProfiles.Operation.Services)
+                            }
+                            3 -> {
+                                check(event is BLEProfiles.Event.OnServices)
+                                generics.profiles.perform(operation = operation)
+                            }
+                            4 -> {
+                                check(event is BLEProfiles.Event.Descriptors.OnWrite)
+                                assertEquals(service.uuid, event.service)
+                                assertEquals(characteristic.uuid, event.characteristic)
+                                assertEquals(descriptor.uuid, event.descriptor)
+                                assertTrue(event.result.isFailure)
+                                val actual = checkNotNull(event.result.exceptionOrNull())
+                                assertTrue(actual is IllegalStateException)
+                                assertEquals("No descriptor ${descriptor.uuid}!", actual.message)
+                            }
+                            else -> error("Index $index is unexpected!")
+                        }
+                    }
+                }
+                generics.profiles.perform(operation = operation)
                 job.join()
             }
         }
