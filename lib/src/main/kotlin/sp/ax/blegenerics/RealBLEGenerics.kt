@@ -538,18 +538,18 @@ class RealBLEGenerics(
                     }
                 }
                 is BLEProfiles.Operation.Descriptors.Write -> {
-                    val service = state.gatt.getService(operation.service) ?: TODO("No service ${operation.service}!")
-                    val characteristic = service.getCharacteristic(operation.characteristic) ?: TODO("No characteristic ${operation.characteristic}!")
-                    val descriptor = characteristic.getDescriptor(operation.descriptor) ?: TODO("No descriptor ${operation.descriptor}!")
-                    if (!descriptor.setValue(operation.bytes)) {
-                        TODO("RealBLEGenerics:profiles:perform($operation):set value error!")
-                    }
-                    if (!state.gatt.writeDescriptor(descriptor)) {
+                    try {
+                        val service = state.gatt.getService(operation.service) ?: error("No service ${operation.service}!")
+                        val characteristic = service.getCharacteristic(operation.characteristic) ?: error("No characteristic ${operation.characteristic}!")
+                        val descriptor = characteristic.getDescriptor(operation.descriptor) ?: error("No descriptor ${operation.descriptor}!")
+                        if (!descriptor.setValue(operation.bytes)) error("RealBLEGenerics:profiles:perform($operation):set value error!")
+                        if (!state.gatt.writeDescriptor(descriptor)) error("Descriptor ${operation.descriptor} writing was not initiated!")
+                    } catch (error: Throwable) {
                         val event = BLEProfiles.Event.Descriptors.OnWrite(
-                            service = service.uuid,
-                            characteristic = characteristic.uuid,
-                            descriptor = descriptor.uuid,
-                            result = Result.failure(IllegalStateException("DESCRIPTOR_WRITING_WAS_NOT_INITIATED!")),
+                            service = operation.service,
+                            characteristic = operation.characteristic,
+                            descriptor = operation.descriptor,
+                            result = Result.failure(error),
                         )
                         emit(event)
                     }
