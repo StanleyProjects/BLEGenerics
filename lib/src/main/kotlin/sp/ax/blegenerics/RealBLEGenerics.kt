@@ -385,6 +385,11 @@ class RealBLEGenerics(
 
     private val receiversConnected = object : BroadcastReceiver() {
         private suspend fun onReceive(intent: Intent) {
+            val state = _states.value
+            if (state !is InternalState.Connected) {
+                logger.warning("receivers connected state: $state")
+                return
+            }
             when (intent.action) {
                 BluetoothDevice.ACTION_BOND_STATE_CHANGED -> {
                     val oldState = intent.getIntExtra(BluetoothDevice.EXTRA_PREVIOUS_BOND_STATE, BluetoothDevice.ERROR)
@@ -394,19 +399,16 @@ class RealBLEGenerics(
                     logger.info("receivers connected ${device.address}: $oldState -> $newState")
                     when (newState) {
                         BluetoothDevice.BOND_NONE -> {
-                            val state = _states.value ?: TODO("RealBLEGenerics:receivers:connected($intent):no state")
                             if (state.address != device.address) return
-                            if (state !is InternalState.Connected) TODO("RealBLEGenerics:receivers:connected($intent):state: $state")
                             if (state.status !is ConnectedStatus.Pairing) TODO("RealBLEGenerics:receivers:connected($intent):state: $state")
                             val reasonKey = "android.bluetooth.device.extra.REASON"
                             val reason = intent.getIntExtra(reasonKey, BluetoothDevice.ERROR) // todo
+                            logger.debug("device ${device.address} unpaired $reason")
                             _states.value = InternalState.Searching(address = state.address)
                             _events.emit(BLEGenerics.Event.OnPairing(address = state.address, isSuccess = false))
                         }
                         BluetoothDevice.BOND_BONDED -> {
-                            val state = _states.value ?: TODO("RealBLEGenerics:receivers:connected($intent):no state")
                             if (state.address != device.address) return
-                            if (state !is InternalState.Connected) TODO("RealBLEGenerics:receivers:connected($intent):state: $state")
                             when (state.status) {
                                 ConnectedStatus.Idling -> if (state.isPaired) return
                                 is ConnectedStatus.Pairing -> {
@@ -414,6 +416,7 @@ class RealBLEGenerics(
                                 }
                                 else -> TODO("RealBLEGenerics:receivers:connected($intent):state: $state")
                             }
+                            logger.debug("device ${device.address} bonded")
                             _states.value = state.copy(
                                 isPaired = true,
                                 status = ConnectedStatus.Idling,
@@ -422,19 +425,12 @@ class RealBLEGenerics(
                     }
                 }
                 BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
-                    when (val state = _states.value) {
-                        is InternalState.Connected -> {
-                            if (state.status !is ConnectedStatus.Unpairing) TODO("RealBLEGenerics:receivers:connected($intent):state: $state")
-                            val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
-                                ?: TODO("RealBLEGenerics:receivers:connected($intent):no device!")
-                            if (state.address != device.address) return
-                            _states.value = InternalState.Searching(address = state.address)
-                        }
-                        is InternalState.Searching -> {
-                            // noop
-                        }
-                        else -> TODO("RealBLEGenerics:receivers:connected($intent):state: $state")
-                    }
+                    if (state.status !is ConnectedStatus.Unpairing) TODO("RealBLEGenerics:receivers:connected($intent):state: $state")
+                    val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+                        ?: TODO("RealBLEGenerics:receivers:connected($intent):no device!")
+                    if (state.address != device.address) return
+                    logger.debug("device ${device.address} disconnected")
+                    _states.value = InternalState.Searching(address = state.address)
                 }
             }
         }
@@ -679,8 +675,10 @@ class RealBLEGenerics(
                         }
                     }
                     if (newState is InternalState.Connected && newState > oldState) {
+                        logger.debug("register connected ->")
                         register(context, receiversConnected, intentFiltersConnected, exported = true)
                     } else if (oldState is InternalState.Connected && oldState > newState) {
+                        logger.debug(" <- unregister connected")
                         context.unregisterReceiver(receiversConnected)
                         try {
                             oldState.gatt.close()
