@@ -45,7 +45,7 @@ internal class MockApplication : Application() {
     override fun sendBroadcast(intent: Intent?) {
         if (intent == null) TODO("MockApplication:sendBroadcast:no intent!")
         if (intent.getPackage() != packageName) TODO("MockApplication:sendBroadcast:package: ${intent.getPackage()}!")
-        val receiver = receivers[intent.action] ?: TODO("MockApplication:sendBroadcast:no receiver!")
+        val receiver = receivers.entries.single { (key, _) -> key.contains(intent.action.orEmpty()) }.value
         receiver.onReceive(this, intent)
     }
 

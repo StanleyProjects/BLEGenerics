@@ -387,48 +387,87 @@ class RealBLEGenerics(
         private suspend fun onReceive(intent: Intent) {
             val state = _states.value
             if (state !is InternalState.Connected) {
-                logger.warning("receivers connected state: $state")
+                logger.warning("receivers(${intent.action}) connected state: $state")
                 return
             }
             when (intent.action) {
                 BluetoothDevice.ACTION_BOND_STATE_CHANGED -> {
+                    val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+                        ?: TODO("RealBLEGenerics:receivers:connected(${intent.action}):bonding:no device!")
+                    if (state.address != device.address) return
                     val oldState = intent.getIntExtra(BluetoothDevice.EXTRA_PREVIOUS_BOND_STATE, BluetoothDevice.ERROR)
                     val newState = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.ERROR)
-                    val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
-                        ?: TODO("RealBLEGenerics:receivers:connected($intent):no device!")
                     logger.info("receivers connected ${device.address}: $oldState -> $newState")
                     when (newState) {
                         BluetoothDevice.BOND_NONE -> {
-                            if (state.address != device.address) return
-                            if (state.status !is ConnectedStatus.Pairing) TODO("RealBLEGenerics:receivers:connected($intent):state: $state")
-                            val reasonKey = "android.bluetooth.device.extra.REASON"
-                            val reason = intent.getIntExtra(reasonKey, BluetoothDevice.ERROR) // todo
-                            logger.debug("device ${device.address} unpaired $reason")
-                            _states.value = InternalState.Searching(address = state.address)
-                            _events.emit(BLEGenerics.Event.OnPairing(address = state.address, isSuccess = false))
+                            when (state.status) {
+                                is ConnectedStatus.Pairing -> {
+                                    val reason = intent.getIntExtra("android.bluetooth.device.extra.REASON", BluetoothDevice.ERROR) // todo
+                                    logger.debug("device ${device.address} unpaired $reason")
+                                    _states.value = InternalState.Searching(address = state.address)
+                                    _events.emit(BLEGenerics.Event.OnPairing(address = state.address, isSuccess = false))
+                                }
+                                else -> if (state.isPaired) {
+                                    val reason = intent.getIntExtra("android.bluetooth.device.extra.REASON", BluetoothDevice.ERROR) // todo
+                                    logger.warning("device ${device.address} unpaired $reason externally")
+                                    _states.value = InternalState.Searching(address = state.address)
+                                }
+                            }
                         }
                         BluetoothDevice.BOND_BONDED -> {
-                            if (state.address != device.address) return
                             when (state.status) {
-                                ConnectedStatus.Idling -> if (state.isPaired) return
-                                is ConnectedStatus.Pairing -> {
-                                    // noop
+                                ConnectedStatus.Idling -> if (!state.isPaired) {
+                                    logger.debug("device ${device.address} bonded externally")
+                                    _states.value = state.copy(
+                                        isPaired = true,
+                                        status = ConnectedStatus.Idling,
+                                    )
                                 }
-                                else -> TODO("RealBLEGenerics:receivers:connected($intent):state: $state")
+                                is ConnectedStatus.Pairing -> {
+                                    logger.debug("device ${device.address} bonded")
+                                    _states.value = state.copy(
+                                        isPaired = true,
+                                        status = ConnectedStatus.Idling,
+                                    )
+                                    _events.emit(BLEGenerics.Event.OnPairing(address = state.address, isSuccess = true))
+                                }
+                                else -> TODO("RealBLEGenerics:receivers:connected(${intent.action}):bonding($oldState:$newState):state: $state")
                             }
-                            logger.debug("device ${device.address} bonded")
-                            _states.value = state.copy(
-                                isPaired = true,
-                                status = ConnectedStatus.Idling,
-                            )
+                        }
+                        BluetoothDevice.BOND_BONDING -> {
+                            when (state.status) {
+                                ConnectedStatus.Idling -> {
+                                    if (state.isPaired) {
+                                        logger.debug("device ${device.address} is unpairing externally")
+                                        _states.value = state.copy(
+                                            isPaired = true,
+                                            status = ConnectedStatus.Unpairing,
+                                        )
+                                    } else {
+                                        logger.debug("device ${device.address} is pairing externally")
+                                    }
+                                    try {
+                                        device.cancelBondProcess()
+                                    } catch (error: Throwable) {
+                                        logger.warning("cancel bonding ${device.address} error: $error")
+                                    }
+                                }
+                                is ConnectedStatus.Pairing -> {
+                                    logger.debug("device ${device.address} is pairing")
+                                }
+                                is ConnectedStatus.Unpairing -> {
+                                    logger.debug("device ${device.address} is unpairing")
+                                }
+                                else -> TODO("RealBLEGenerics:receivers:connected(${intent.action}):bonding($oldState:$newState):state: $state")
+                            }
                         }
                     }
                 }
                 BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
-                    if (state.status !is ConnectedStatus.Unpairing) TODO("RealBLEGenerics:receivers:connected($intent):state: $state")
                     val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
-                        ?: TODO("RealBLEGenerics:receivers:connected($intent):no device!")
+                        ?: TODO("RealBLEGenerics:receivers:connected($intent):disconnected:no device!")
                     if (state.address != device.address) return
+                    if (state.status !is ConnectedStatus.Unpairing) TODO("RealBLEGenerics:receivers:connected($intent):disconnected:state: $state")
                     logger.debug("device ${device.address} disconnected")
                     _states.value = InternalState.Searching(address = state.address)
                 }
@@ -876,6 +915,12 @@ class RealBLEGenerics(
 
     private fun BluetoothDevice.removeBond(): Boolean {
         val result = javaClass.getMethod("removeBond").invoke(this)
+        check(result is Boolean)
+        return result
+    }
+
+    internal fun BluetoothDevice.cancelBondProcess(): Boolean {
+        val result = javaClass.getMethod("cancelBondProcess").invoke(this)
         check(result is Boolean)
         return result
     }

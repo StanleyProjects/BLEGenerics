@@ -1,12 +1,14 @@
 package sp.ax.blegenerics
 
 import android.Manifest
+import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import kotlinx.coroutines.CoroutineName
@@ -483,6 +485,101 @@ internal class RealBLEGenericsTest {
                 }
                 generics.profiles.perform(operation = operation)
                 job.join()
+            }
+        }
+    }
+
+    @Config(application = MockApplication::class, sdk = [Build.VERSION_CODES.P, Build.VERSION_CODES.TIRAMISU])
+    @Test
+    fun pairTest() = runBlocking {
+        withTimeout(6.seconds) {
+            val application = RuntimeEnvironment.getApplication()
+            val context: Context = application
+            //
+            val bm = context.getSystemService(BluetoothManager::class.java)
+            check(bm.adapter.enable())
+            check(bm.adapter.isEnabled)
+            //
+            val shadow = Shadows.shadowOf(application)
+            shadow.grantPermissions(Manifest.permission.ACCESS_FINE_LOCATION)
+            check(application.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED)
+            shadow.grantPermissions(Manifest.permission.BLUETOOTH_SCAN)
+            check(application.checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED)
+            //
+            onRealBLEGenerics(
+                main = coroutineContext,
+                context = context,
+            ) { generics ->
+                val address = "00:00:00:00:00:00"
+                assertNull("before connect", generics.states.value)
+                var job = launch(CoroutineName("connect")) {
+                    generics.states.take(3).collectIndexed { index, state ->
+                        println("$index] $state") // todo
+                        when (index) {
+                            0 -> assertNull(state)
+                            1 -> {
+                                check(state is BLEGenerics.State.Connecting) { "$index] state: $state" }
+                                assertEquals(address, state.address)
+                                val device = bm.adapter.getRemoteDevice(address) ?: error("No device!")
+                                val gatt = Shadows.shadowOf(device).bluetoothGatts.single() ?: error("No gatt!")
+                                val callback = Shadows.shadowOf(gatt).gattCallback ?: error("No callback!")
+                                callback.onConnectionStateChange(gatt, BluetoothGatt.GATT_SUCCESS, BluetoothGatt.STATE_CONNECTED)
+                            }
+                            2 -> {
+                                check(state is BLEGenerics.State.Connected) { "$index] state: $state" }
+                                assertEquals(address, state.address)
+                                assertFalse(state.isPaired)
+                            }
+                            else -> error("Index $index is unexpected!")
+                        }
+                    }
+                }
+                generics.connect(address = address)
+                job.join()
+                assertTrue("after connect", generics.states.value is BLEGenerics.State.Connected)
+                val device = bm.adapter.getRemoteDevice(address) ?: error("No device!")
+                val gatt = Shadows.shadowOf(device).bluetoothGatts.single() ?: error("No gatt!")
+                check(device.bondState == BluetoothDevice.BOND_NONE)
+                Shadows.shadowOf(device).setCreatedBond(true)
+                job = launch(CoroutineName("pairing")) {
+                    generics.states.take(2).collectIndexed { index, state ->
+                        println("$index] $state") // todo
+                        when (index) {
+                            0 -> {
+                                check(state is BLEGenerics.State.Connected)
+                                assertFalse(state.isPaired)
+                            }
+                            1 -> check(state is BLEGenerics.State.Pairing)
+                            else -> error("Index $index is unexpected!")
+                        }
+                    }
+                }
+                generics.pair(pin = "000000")
+                job.join()
+                job = launch(CoroutineName("pair")) {
+                    generics.events.take(1).collectIndexed { index, event ->
+                        println("$index] $event") // todo
+                        when (index) {
+                            0 -> {
+                                check(event is BLEGenerics.Event.OnPairing)
+                                assertTrue(event.isSuccess)
+                            }
+                            else -> error("Index $index is unexpected!")
+                        }
+                    }
+                }
+                Shadows.shadowOf(device).setBondState(BluetoothDevice.BOND_BONDED)
+                val broadcast = Intent(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+                broadcast.setPackage(context.packageName) // https://stackoverflow.com/a/76920719/4398606
+                broadcast.putExtra(BluetoothDevice.EXTRA_DEVICE, device)
+                broadcast.putExtra(BluetoothDevice.EXTRA_PREVIOUS_BOND_STATE, BluetoothDevice.BOND_NONE)
+                broadcast.putExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_BONDED)
+                context.sendBroadcast(broadcast)
+                job.join()
+                val state = generics.states.value
+                check(state is BLEGenerics.State.Connected)
+                assertEquals(address, state.address)
+                assertTrue(state.isPaired)
             }
         }
     }
