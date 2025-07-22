@@ -433,6 +433,33 @@ class RealBLEGenerics(
                                 else -> TODO("RealBLEGenerics:receivers:connected(${intent.action}):bonding($oldState:$newState):state: $state")
                             }
                         }
+                        BluetoothDevice.BOND_BONDING -> {
+                            when (state.status) {
+                                ConnectedStatus.Idling -> {
+                                    if (state.isPaired) {
+                                        logger.debug("device ${device.address} is unpairing externally")
+                                        _states.value = state.copy(
+                                            isPaired = true,
+                                            status = ConnectedStatus.Unpairing,
+                                        )
+                                    } else {
+                                        logger.debug("device ${device.address} is pairing externally")
+                                    }
+                                    try {
+                                        device.cancelBondProcess()
+                                    } catch (error: Throwable) {
+                                        logger.warning("cancel bonding ${device.address} error: $error")
+                                    }
+                                }
+                                is ConnectedStatus.Pairing -> {
+                                    logger.debug("device ${device.address} is pairing")
+                                }
+                                is ConnectedStatus.Unpairing -> {
+                                    logger.debug("device ${device.address} is unpairing")
+                                }
+                                else -> TODO("RealBLEGenerics:receivers:connected(${intent.action}):bonding($oldState:$newState):state: $state")
+                            }
+                        }
                     }
                 }
                 BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
@@ -887,6 +914,12 @@ class RealBLEGenerics(
 
     private fun BluetoothDevice.removeBond(): Boolean {
         val result = javaClass.getMethod("removeBond").invoke(this)
+        check(result is Boolean)
+        return result
+    }
+
+    internal fun BluetoothDevice.cancelBondProcess(): Boolean {
+        val result = javaClass.getMethod("cancelBondProcess").invoke(this)
         check(result is Boolean)
         return result
     }

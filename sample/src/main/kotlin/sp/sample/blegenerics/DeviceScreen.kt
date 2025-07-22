@@ -96,7 +96,7 @@ internal fun DeviceScreen(
                     println(message)
                 }
                 is BLEProfiles.Event.Descriptors.OnWrite -> {
-                    val message = "descriptor ${event.descriptor} write success: ${event.result.isSuccess}"
+                    val message = "descriptor ${event.descriptor} write success: ${event.result.isSuccess} ${event.result.exceptionOrNull()}"
                     println(message)
 //                    context.showToast("on write descriptor ${event.descriptor}")
                 }
@@ -130,6 +130,26 @@ internal fun DeviceScreen(
             Spacer(Modifier.weight(1f)) // todo
             if (state is BLEGenerics.State.Connected) {
                 val characteristics = discovered.value
+                BasicText(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .clickable {
+                            val service = UUID.fromString("00000000-cc7a-482a-984a-7f2ed5b3e58f") // todo
+                            val characteristic = UUID.fromString("6e400003-b5a3-f393-e0a9-e50e24dcca9e") // todo
+                            val descriptor = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb") // todo
+                            val operation = BLEProfiles.Operation.Descriptors.Write(
+                                service = service,
+                                characteristic = characteristic,
+                                descriptor = descriptor,
+                                bytes = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE,
+                            )
+                            perform<DeviceService>(context = context, operation = operation)
+                        }
+                        .wrapContentSize(),
+                    text = "write descriptor",
+                    style = TextStyle(color = themeState.text),
+                )
                 if (characteristics == null) {
                     BasicText(
                         modifier = Modifier
@@ -162,26 +182,6 @@ internal fun DeviceScreen(
                             }
                             .wrapContentSize(),
                         text = "write characteristic",
-                        style = TextStyle(color = themeState.text),
-                    )
-                    BasicText(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .clickable {
-                                val service = UUID.fromString("00000000-cc7a-482a-984a-7f2ed5b3e58f") // todo
-                                val characteristic = UUID.fromString("6e400003-b5a3-f393-e0a9-e50e24dcca9e") // todo
-                                val descriptor = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb") // todo
-                                val operation = BLEProfiles.Operation.Descriptors.Write(
-                                    service = service,
-                                    characteristic = characteristic,
-                                    descriptor = descriptor,
-                                    bytes = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE,
-                                )
-                                perform<DeviceService>(context = context, operation = operation)
-                            }
-                            .wrapContentSize(),
-                        text = "write descriptor",
                         style = TextStyle(color = themeState.text),
                     )
                     BasicText(
