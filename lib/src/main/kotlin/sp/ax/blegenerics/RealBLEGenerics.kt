@@ -429,6 +429,7 @@ class RealBLEGenerics(
                                         isPaired = true,
                                         status = ConnectedStatus.Idling,
                                     )
+                                    _events.emit(BLEGenerics.Event.OnPairing(address = state.address, isSuccess = true))
                                 }
                                 else -> TODO("RealBLEGenerics:receivers:connected(${intent.action}):bonding($oldState:$newState):state: $state")
                             }
