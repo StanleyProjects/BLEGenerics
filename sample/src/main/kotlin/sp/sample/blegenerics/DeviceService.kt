@@ -40,7 +40,7 @@ internal class DeviceService : BLEGenericsService(
         }
         coroutineScope.launch {
             states.collect { state ->
-                println("[DeviceService]:state: $state") // todo
+//                println("[DeviceService]:state: $state") // todo
                 val notification = buildNotification(state = state)
                 notify(notification)
             }

@@ -3,10 +3,6 @@ package sp.ax.blegenerics
 internal sealed interface ConnectedStatus : Comparable<ConnectedStatus> {
     val ordinal: Int
 
-    data object Disconnecting : ConnectedStatus {
-        override val ordinal = 2
-    }
-
     data object Unpairing : ConnectedStatus {
         override val ordinal = 4
     }
