@@ -114,9 +114,10 @@ internal fun DeviceScreen(
                 address: ${device.address}
             """.trimIndent()
             val enabled = when (state) {
-                is BLEGenerics.State.Connected -> true
-                is BLEGenerics.State.Searching -> true
-                is BLEGenerics.State.Waiting -> true
+                is BLEGenerics.State.Connected,
+                is BLEGenerics.State.Searching,
+                is BLEGenerics.State.Waiting,
+                is BLEGenerics.State.Connecting -> true
                 else -> false
             }
             BasicText(
@@ -242,18 +243,20 @@ internal fun DeviceScreen(
                     )
                 }
             }
-            BasicText(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .clickable(enabled = enabled) {
-                        println("on disconnect...")
-                        disconnect<DeviceService>(context = context)
-                    }
-                    .wrapContentSize(),
-                text = "disconnect",
-                style = TextStyle(color = themeState.text),
-            )
+            if (enabled) {
+                BasicText(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .clickable(enabled = enabled) {
+                            println("on disconnect...")
+                            disconnect<DeviceService>(context = context)
+                        }
+                        .wrapContentSize(),
+                    text = "disconnect",
+                    style = TextStyle(color = themeState.text),
+                )
+            }
         }
     }
 }

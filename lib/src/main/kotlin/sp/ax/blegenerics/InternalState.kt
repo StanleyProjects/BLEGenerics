@@ -6,17 +6,6 @@ internal sealed interface InternalState : Comparable<InternalState?> {
     val ordinal: Int
     val address: String
 
-    class Connecting(
-        override val address: String,
-        val gatt: BluetoothGatt,
-    ) : InternalState {
-        override val ordinal = 4
-
-        override fun toString(): String {
-            return "Connecting(address: $address, gatt: ${gatt.hashCode()})"
-        }
-    }
-
     class Connected(
         override val address: String,
         val isPaired: Boolean,
@@ -39,7 +28,7 @@ internal sealed interface InternalState : Comparable<InternalState?> {
         }
 
         companion object : Comparable<InternalState?> {
-            const val Ordinal = 10
+            const val Ordinal = 32
 
             override fun compareTo(other: InternalState?): Int {
                 if (other == null) return 1
@@ -48,16 +37,33 @@ internal sealed interface InternalState : Comparable<InternalState?> {
         }
     }
 
+    class Connecting(
+        override val address: String,
+        val gatt: BluetoothGatt,
+    ) : InternalState {
+        override val ordinal = 16
+
+        override fun toString(): String {
+            return "Connecting(address: $address, gatt: ${gatt.hashCode()})"
+        }
+    }
+
     data class Searching(
         override val address: String,
     ) : InternalState {
-        override val ordinal = 2
+        override val ordinal = 8
     }
 
     data class Waiting(
         override val address: String,
     ) : InternalState {
-        override val ordinal = 1
+        override val ordinal = 4
+    }
+
+    data class Disconnecting(
+        override val address: String,
+    ) : InternalState {
+        override val ordinal = 2
     }
 
     override fun compareTo(other: InternalState?): Int {
