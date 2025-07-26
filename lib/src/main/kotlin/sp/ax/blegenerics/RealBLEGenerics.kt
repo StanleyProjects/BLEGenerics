@@ -598,48 +598,46 @@ class RealBLEGenerics(
     }
     override val profiles: BLEProfiles = _profiles
 
+    private fun toString(state: InternalState?): String {
+        return when (state) {
+            is InternalState.Connected -> when (state.status) {
+                ConnectedStatus.Disconnecting -> "Disconnecting"
+                ConnectedStatus.Idling -> if (state.isPaired) {
+                    "Paired"
+                } else {
+                    "Unpaired"
+                }
+                is ConnectedStatus.Pairing -> "Pairing"
+                ConnectedStatus.Unpairing -> "Unpairing"
+            }
+            is InternalState.Connecting -> "Connecting"
+            is InternalState.Searching -> "Searching"
+            is InternalState.Waiting -> "Waiting"
+            null -> "Disconnected"
+        }
+    }
+
     private fun onStates(oldState: InternalState?, newState: InternalState?) {
         if (oldState == null) {
-            logger.info("new state: $newState")
+            logger.info("new state: ${toString(newState)}")
         } else if (newState == null) {
-            logger.info("old state: $oldState")
+            logger.info("old state: ${toString(oldState)}")
         } else if (oldState > newState) {
-            val message = """
-                      * $oldState
-                    *
-                  *
-                * $newState
-            """.trimIndent()
+            val message = String.format("%-16S < %s", toString(newState), toString(oldState).lowercase())
             logger.info(message)
         } else if (oldState < newState) {
-            val message = """
-                * $oldState
-                  *
-                    *
-                      * $newState
-            """.trimIndent()
+            val message = String.format("%-16s > %S", toString(oldState).lowercase(), toString(newState))
             logger.info(message)
         } else if (oldState is InternalState.Connected && newState is InternalState.Connected) {
-            if (oldState.status < newState.status) {
-                val message = """
-                    * $oldState
-                      *
-                        * $newState
-                """.trimIndent()
+            if (oldState.status > newState.status) {
+                val message = String.format("%-16S < %s", toString(newState), toString(oldState).lowercase())
                 logger.info(message)
             } else {
-                val message = """
-                        * $oldState
-                      *
-                    * $newState
-                """.trimIndent()
+                val message = String.format("%-16s > %S", toString(oldState).lowercase(), toString(newState))
                 logger.info(message)
             }
         } else {
-            val message = """
-                * $oldState
-                  * $newState
-            """.trimIndent()
+            val message = String.format("%-16s > %s", toString(oldState), toString(newState))
             logger.info(message)
         }
     }
