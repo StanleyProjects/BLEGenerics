@@ -29,7 +29,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import java.util.Date
 import java.util.Queue
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
@@ -379,36 +378,34 @@ class RealBLEGenerics(
         it.addAction(LocationManager.PROVIDERS_CHANGED_ACTION)
     }
 
-    /*
-    private val receiversPairing = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent == null) return
-            when (intent.action) {
-                BluetoothDevice.ACTION_PAIRING_REQUEST -> {
-                    val variant = intent.getIntExtra(BluetoothDevice.EXTRA_PAIRING_VARIANT, BluetoothDevice.ERROR)
-                    when (variant) {
-                        BluetoothDevice.PAIRING_VARIANT_PIN -> {
-                            val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
-                                ?: TODO("RealBLEGenerics:onReceive($intent):no device!")
-                            val state = _states.value
-                            if (state !is InternalState.Connected) TODO("RealBLEGenerics:onReceive($intent):state $state!")
-                            if (state.status !is ConnectedStatus.Pairing) TODO("RealBLEGenerics:onReceive($intent):state $state!")
-                            if (state.address != device.address) return
-                            abortBroadcast()
-                            val pin = state.status.pin ?: TODO("RealBLEGenerics:onReceive($intent):no pin!")
-                            logger.debug("set pin ${state.address} $pin")
-                            if (!device.setPin(pin.toByteArray())) TODO("RealBLEGenerics:onReceive($intent):set pin error!")
-                        }
-                    }
-                }
-            }
-        }
-    }
-    private val intentFiltersPairing = IntentFilter().also {
-        it.priority = IntentFilter.SYSTEM_HIGH_PRIORITY
-        it.addAction(BluetoothDevice.ACTION_PAIRING_REQUEST)
-    }
-    */
+//    private val receiversPairing = object : BroadcastReceiver() {
+//        override fun onReceive(context: Context?, intent: Intent?) {
+//            if (intent == null) return
+//            when (intent.action) {
+//                BluetoothDevice.ACTION_PAIRING_REQUEST -> {
+//                    val variant = intent.getIntExtra(BluetoothDevice.EXTRA_PAIRING_VARIANT, BluetoothDevice.ERROR)
+//                    when (variant) {
+//                        BluetoothDevice.PAIRING_VARIANT_PIN -> {
+//                            val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+//                                ?: TODO("RealBLEGenerics:onReceive($intent):no device!")
+//                            val state = _states.value
+//                            if (state !is InternalState.Connected) TODO("RealBLEGenerics:onReceive($intent):state $state!")
+//                            if (state.status !is ConnectedStatus.Pairing) TODO("RealBLEGenerics:onReceive($intent):state $state!")
+//                            if (state.address != device.address) return
+//                            abortBroadcast()
+//                            val pin = state.status.pin ?: TODO("RealBLEGenerics:onReceive($intent):no pin!")
+//                            logger.debug("set pin ${state.address} $pin")
+//                            if (!device.setPin(pin.toByteArray())) TODO("RealBLEGenerics:onReceive($intent):set pin error!")
+//                        }
+//                    }
+//                }
+//            }
+//        }
+//    }
+//    private val intentFiltersPairing = IntentFilter().also {
+//        it.priority = IntentFilter.SYSTEM_HIGH_PRIORITY
+//        it.addAction(BluetoothDevice.ACTION_PAIRING_REQUEST)
+//    }
 
     private suspend fun onBondStateChanged(intent: Intent, state: InternalState.Connected) {
         val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
@@ -914,10 +911,11 @@ class RealBLEGenerics(
                         }
                         is InternalState.Connecting,
                         is InternalState.Searching,
-                        is InternalState.Waiting -> onDisconnect(address = state.address)
-                        is InternalState.Disconnecting, null -> {
-                            // noop
-                        }
+                        is InternalState.Waiting,
+                        -> onDisconnect(address = state.address)
+                        is InternalState.Disconnecting,
+                        null,
+                        -> { /* noop */ }
                     }
                 }
             }
