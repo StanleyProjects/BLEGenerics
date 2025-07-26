@@ -1,6 +1,7 @@
 package sp.ax.blegenerics
 
 import android.Manifest
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCharacteristic
@@ -580,6 +581,99 @@ internal class RealBLEGenericsTest {
                 check(state is BLEGenerics.State.Connected)
                 assertEquals(address, state.address)
                 assertTrue(state.isPaired)
+            }
+        }
+    }
+
+    @Config(application = MockApplication::class, sdk = [Build.VERSION_CODES.P, Build.VERSION_CODES.TIRAMISU])
+    @Test
+    fun bluetoothTest() = runBlocking {
+        withTimeout(6.seconds) {
+            val application = RuntimeEnvironment.getApplication()
+            val context: Context = application
+            //
+            val bm = context.getSystemService(BluetoothManager::class.java)
+            Shadows.shadowOf(bm.adapter).setState(BluetoothAdapter.STATE_ON)
+            check(bm.adapter.isEnabled)
+            //
+            val shadow = Shadows.shadowOf(application)
+            shadow.grantPermissions(Manifest.permission.ACCESS_FINE_LOCATION)
+            check(application.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED)
+            shadow.grantPermissions(Manifest.permission.BLUETOOTH_SCAN)
+            check(application.checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED)
+            //
+            onRealBLEGenerics(
+                main = coroutineContext,
+                context = context,
+            ) { generics ->
+                val address = "00:00:00:00:00:00"
+                assertNull("before connect", generics.states.value)
+                var job = launch(CoroutineName("connect")) {
+                    generics.states.take(3).collectIndexed { index, state ->
+                        println("$index] $state") // todo
+                        when (index) {
+                            0 -> assertNull(state)
+                            1 -> {
+                                check(state is BLEGenerics.State.Connecting) { "$index] state: $state" }
+                                assertEquals(address, state.address)
+                                val device = bm.adapter.getRemoteDevice(address) ?: error("No device!")
+                                val gatt = Shadows.shadowOf(device).bluetoothGatts.single() ?: error("No gatt!")
+                                val callback = Shadows.shadowOf(gatt).gattCallback ?: error("No callback!")
+                                callback.onConnectionStateChange(gatt, BluetoothGatt.GATT_SUCCESS, BluetoothGatt.STATE_CONNECTED)
+                            }
+                            2 -> {
+                                check(state is BLEGenerics.State.Connected) { "$index] state: $state" }
+                                assertEquals(address, state.address)
+                                assertFalse(state.isPaired)
+                            }
+                            else -> error("Index $index is unexpected!")
+                        }
+                    }
+                }
+                generics.connect(address = address)
+                job.join()
+                assertTrue("after connect", generics.states.value is BLEGenerics.State.Connected)
+                job = launch(CoroutineName("states")) {
+                    generics.states.take(3).collectIndexed { index, state ->
+                        when (index) {
+                            0 -> {
+                                check(state is BLEGenerics.State.Connected) { "$index] state: $state" }
+                                assertEquals(address, state.address)
+                                assertFalse(state.isPaired)
+                                Shadows.shadowOf(bm.adapter).setState(BluetoothAdapter.STATE_TURNING_OFF)
+                                var broadcast = Intent(BluetoothAdapter.ACTION_STATE_CHANGED)
+                                broadcast.setPackage(context.packageName) // https://stackoverflow.com/a/76920719/4398606
+                                broadcast.putExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.STATE_TURNING_OFF)
+                                context.sendBroadcast(broadcast)
+                                Shadows.shadowOf(bm.adapter).setState(BluetoothAdapter.STATE_OFF)
+                                broadcast = Intent(BluetoothAdapter.ACTION_STATE_CHANGED)
+                                broadcast.setPackage(context.packageName) // https://stackoverflow.com/a/76920719/4398606
+                                broadcast.putExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.STATE_OFF)
+                                context.sendBroadcast(broadcast)
+                            }
+                            1 -> {
+                                check(state is BLEGenerics.State.Waiting) { "$index] state: $state" }
+                                assertEquals(address, state.address)
+                                Shadows.shadowOf(bm.adapter).setState(BluetoothAdapter.STATE_TURNING_ON)
+                                var broadcast = Intent(BluetoothAdapter.ACTION_STATE_CHANGED)
+                                broadcast.setPackage(context.packageName) // https://stackoverflow.com/a/76920719/4398606
+                                broadcast.putExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.STATE_TURNING_ON)
+                                context.sendBroadcast(broadcast)
+                                Shadows.shadowOf(bm.adapter).setState(BluetoothAdapter.STATE_ON)
+                                broadcast = Intent(BluetoothAdapter.ACTION_STATE_CHANGED)
+                                broadcast.setPackage(context.packageName) // https://stackoverflow.com/a/76920719/4398606
+                                broadcast.putExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.STATE_ON)
+                                context.sendBroadcast(broadcast)
+                            }
+                            2 -> {
+                                check(state is BLEGenerics.State.Searching) { "$index] state: $state" }
+                                assertEquals(address, state.address)
+                            }
+                            else -> error("Index $index is unexpected!")
+                        }
+                    }
+                }
+                job.join()
             }
         }
     }
