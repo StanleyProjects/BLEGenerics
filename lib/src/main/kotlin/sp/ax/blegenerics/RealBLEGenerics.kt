@@ -84,7 +84,7 @@ class RealBLEGenerics(
             newState: Int,
         ) {
             if (gatt == null) TODO("RealBLEGenerics:callback:no gatt!")
-            logger.info("gatt callback ${gatt.hashCode()} [ status: $status | new state: $newState ]")
+            logger.info("gatt callback [ status: $status | new state: $newState ]")
             coroutineScope.launch {
                 mutex.withLock {
                     when (newState) {
@@ -108,7 +108,7 @@ class RealBLEGenerics(
                             _profiles.emit(event)
                         }
                         else -> {
-                            logger.warning("on services discovered: ${gatt?.hashCode()} [ status: $status ]")
+                            logger.warning("on services discovered: [ status: $status ]")
                         }
                     }
                 }
@@ -124,7 +124,7 @@ class RealBLEGenerics(
                             _profiles.emit(event)
                         }
                         else -> {
-                            logger.warning("on MTU changed: ${gatt?.hashCode()} [ status: $status | mtu: $mtu ]")
+                            logger.warning("on MTU changed: [ status: $status | mtu: $mtu ]")
                         }
                     }
                 }
@@ -150,7 +150,7 @@ class RealBLEGenerics(
                             _profiles.emit(event)
                         }
                         else -> {
-                            logger.warning("on write: ${gatt?.hashCode()} [ status: $status | descriptor: ${descriptor?.uuid} ]")
+                            logger.warning("on write: [ status: $status | descriptor: ${descriptor?.uuid} ]")
                         }
                     }
                 }
@@ -162,7 +162,6 @@ class RealBLEGenerics(
             gatt: BluetoothGatt?,
             characteristic: BluetoothGattCharacteristic?,
         ) {
-            logger.debug("on chars changed ${gatt?.hashCode()} ${characteristic?.uuid}")
             if (gatt == null) return
             if (characteristic == null) return
             onCharacteristicChanged(
@@ -207,7 +206,7 @@ class RealBLEGenerics(
                             _profiles.emit(event)
                         }
                         else -> {
-                            logger.warning("on write: ${gatt?.hashCode()} [ status: $status | characteristic: ${characteristic?.uuid} ]")
+                            logger.warning("on write: [ status: $status | characteristic: ${characteristic?.uuid} ]")
                         }
                     }
                 }
@@ -292,8 +291,6 @@ class RealBLEGenerics(
             gpsGranted = context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED,
             gpsEnabled = gpsEnabled,
         )
-        logger.debug("managers [ bt: ${managers.btEnabled} | gps: ${managers.gpsEnabled} ]")
-        logger.debug("permissions [ bt: ${managers.btGranted} | gps: ${managers.gpsGranted} ]")
         when (val state = _states.value) {
             is InternalState.Waiting -> {
                 if (managers.isReady()) {
@@ -321,6 +318,14 @@ class RealBLEGenerics(
             when (intent.action) {
                 BluetoothAdapter.ACTION_STATE_CHANGED -> {
                     val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+                    val text = when (state) {
+                        BluetoothAdapter.STATE_OFF -> "off"
+                        BluetoothAdapter.STATE_ON -> "on"
+                        BluetoothAdapter.STATE_TURNING_OFF -> "turning off"
+                        BluetoothAdapter.STATE_TURNING_ON -> "turning on"
+                        else -> state.toString()
+                    }
+                    logger.info("bluetooth adapter state: $text")
                     when (state) {
                         BluetoothAdapter.STATE_ON -> checkManagers(btEnabled = true)
                         BluetoothAdapter.STATE_TURNING_OFF -> checkManagers(btEnabled = false)
@@ -331,13 +336,15 @@ class RealBLEGenerics(
                         val name = intent.getStringExtra(LocationManager.EXTRA_PROVIDER_NAME)
                         if (name != LocationManager.GPS_PROVIDER) return
                     }
+                    val lm = context.getSystemService(LocationManager::class.java)
+                    val isLocationEnabled = lm.isProviderEnabled(LocationManager.GPS_PROVIDER)
+                    logger.info("gps enabled: $isLocationEnabled")
                     checkManagers()
                 }
             }
         }
 
         override fun onReceive(context: Context?, intent: Intent?) {
-            logger.info("receivers ${intent?.action} ${intent?.extras?.keySet()?.toList()}")
             if (intent == null) return
             coroutineScope.launch {
                 mutex.withLock {
@@ -355,7 +362,6 @@ class RealBLEGenerics(
 
     private val receiversPairing = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            logger.info("receivers pairing ${intent?.action} ${intent?.extras?.keySet()?.toList()}")
             if (intent == null) return
             when (intent.action) {
                 BluetoothDevice.ACTION_PAIRING_REQUEST -> {
@@ -475,7 +481,6 @@ class RealBLEGenerics(
         }
 
         override fun onReceive(context: Context?, intent: Intent?) {
-            logger.info("receivers connected ${intent?.action} ${intent?.extras?.keySet()?.toList()}")
             if (intent == null) return
             coroutineScope.launch {
                 mutex.withLock {
@@ -509,13 +514,11 @@ class RealBLEGenerics(
 
         override suspend fun emit(event: BLEProfiles.Event) {
             if (!performing.get()) return
-            logger.info("profiles event $event")
             events.emit(event)
             perform()
         }
 
         override suspend fun clear() {
-            logger.info("profiles clear")
             mutex.withLock {
                 performing.set(false)
                 operations.clear()
@@ -525,18 +528,15 @@ class RealBLEGenerics(
         private suspend fun perform() {
             val state = _states.value
             if (state !is InternalState.Connected || state.status !is ConnectedStatus.Idling) {
-                logger.info("stop operations")
                 performing.set(false)
                 operations.clear()
                 return
             }
             val operation = operations.poll()
             if (operation == null) {
-                logger.info("no operation")
                 performing.set(false)
                 return
             }
-            logger.debug("operation $operation")
             when (operation) {
                 is BLEProfiles.Operation.ChangeMTU -> {
                     if (!state.gatt.requestMtu(operation.value)) {
@@ -691,7 +691,6 @@ class RealBLEGenerics(
                             val timeMax = 4.seconds
                             val timeDelay = 250.milliseconds
                             val timeStart = now()
-                            logger.info("connecting start: ${Date(timeStart.inWholeMilliseconds)}")
                             while (true) {
                                 val _state = _states.value
                                 if (_state !is InternalState.Connecting) break
@@ -712,10 +711,8 @@ class RealBLEGenerics(
                         }
                     }
                     if (newState is InternalState.Connected && newState > oldState) {
-                        logger.debug("register connected ->")
                         register(context, receiversConnected, intentFiltersConnected, exported = true)
                     } else if (oldState is InternalState.Connected && oldState > newState) {
-                        logger.debug(" <- unregister connected")
                         context.unregisterReceiver(receiversConnected)
                         try {
                             oldState.gatt.close()
@@ -741,15 +738,18 @@ class RealBLEGenerics(
                             onSuccess = {
                                 launch(default) {
                                     val timeDelay = 250.milliseconds
-                                    logger.info("searching start: ${Date(scanCallback.timeStart.inWholeMilliseconds)}")
                                     while (true) {
                                         val actual = _states.value
                                         if (actual !is InternalState.Searching) break
                                         val timeNow = now()
                                         val fromStart = timeNow - scanCallback.timeStart
                                         val fromLast = timeNow - scanCallback.timeLastResult
-                                        if (fromStart > 16.seconds || fromLast > 4.seconds) {
-                                            logger.warning("searching timeout...")
+                                        if (fromLast > 4.seconds) {
+                                            logger.warning("searching timeout from last: $fromLast")
+                                            _states.value = InternalState.Waiting(address = actual.address)
+                                            break
+                                        } else if (fromStart > 16.seconds) {
+                                            logger.warning("searching timeout: $fromStart")
                                             _states.value = InternalState.Waiting(address = actual.address)
                                             break
                                         }
@@ -778,7 +778,6 @@ class RealBLEGenerics(
     }
 
     private fun startScan() {
-        logger.debug("start scan...")
         val bm = context.getSystemService(BluetoothManager::class.java)
         val adapter = bm.adapter ?: TODO("RealBLEGenerics:startScan:no adapter!")
         if (!adapter.isEnabled) TODO("RealBLEGenerics:startScan:adapter disabled!")
@@ -800,7 +799,6 @@ class RealBLEGenerics(
     }
 
     private fun stopScan() {
-        logger.debug("stop scan...")
         scanCallback.isEnabled = false
         val bm = context.getSystemService(BluetoothManager::class.java)
         val adapter = bm.adapter ?: TODO("RealBLEScanner:stopScan:no adapter!")
@@ -811,7 +809,6 @@ class RealBLEGenerics(
 
     private suspend fun onConnect(gatt: BluetoothGatt) {
         val address = gatt.device.address
-        logger.debug("on -> connect $address")
         _states.value = InternalState.Connected(
             address = address,
             isPaired = gatt.device.bondState == BluetoothDevice.BOND_BONDED,
@@ -822,13 +819,11 @@ class RealBLEGenerics(
     }
 
     private suspend fun onDisconnect(address: String) {
-        logger.debug("on -> disconnect $address")
         _states.value = null
         _events.emit(BLEGenerics.Event.OnDisconnect(address = address))
     }
 
     private fun connectGatt(address: String): BluetoothGatt {
-        logger.debug("connect gatt $address...")
         val bm = context.getSystemService(BluetoothManager::class.java)
         val adapter = bm.adapter ?: TODO("RealBLEGenerics:connectGatt($address):no adapter!")
         if (!adapter.isEnabled) {
@@ -855,7 +850,6 @@ class RealBLEGenerics(
         coroutineScope.launch {
             mutex.withLock {
                 withContext(default) {
-                    logger.debug("connect $address")
                     val state = _states.value
                     if (state != null) TODO("RealBLEGenerics:connect($address):state: $state")
                     connecting(address = address)
@@ -868,9 +862,7 @@ class RealBLEGenerics(
         coroutineScope.launch {
             mutex.withLock {
                 withContext(default) {
-                    val state = _states.value
-                    logger.debug("disconnect ${state?.address}")
-                    when (state) {
+                    when (val state = _states.value) {
                         is InternalState.Connected -> {
                             if (state.status !is ConnectedStatus.Idling) TODO("RealBLEGenerics:disconnect:state: $state")
                             val address = state.address
@@ -903,7 +895,6 @@ class RealBLEGenerics(
                     if (state !is InternalState.Connected) TODO("RealBLEGenerics:pair:state: $state")
                     if (state.status !is ConnectedStatus.Idling) TODO("RealBLEGenerics:pair:state: $state")
                     val address = state.address
-                    logger.debug("pair $address pin: $pin")
                     if (state.isPaired) TODO("RealBLEGenerics:pair($address):already paired!")
                     _states.value = state.copy(status = ConnectedStatus.Pairing(pin = pin))
                 }
@@ -931,7 +922,6 @@ class RealBLEGenerics(
                     if (state !is InternalState.Connected) TODO("RealBLEGenerics:unpair:state: $state")
                     if (state.status !is ConnectedStatus.Idling) TODO("RealBLEGenerics:unpair:state: $state")
                     val address = state.address
-                    logger.debug("unpair $address")
                     if (!state.isPaired) TODO("RealBLEGenerics:unpair($address):already unpaired!")
                     _states.value = state.copy(status = ConnectedStatus.Unpairing)
                     try {
