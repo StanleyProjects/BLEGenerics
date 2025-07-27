@@ -89,13 +89,18 @@ internal class DeviceService : BLEGenericsService(
             }
         }
         if (state is BLEGenerics.State.Connected) {
+            val intent = Intent(context, DeviceService::class.java)
+            intent.putExtra("address", state.address)
             if (state.isPaired) {
-                val intent = Intent(context, DeviceService::class.java)
                 intent.action = BLEGenericsUnpairAction
-                intent.putExtra("address", state.address)
-                val unpairIntent = PendingIntent.getService(context, 1, intent, PendingIntent.FLAG_IMMUTABLE)
-                val action = NotificationCompat.Action.Builder(-1, "unpair", unpairIntent)
-                    .build()
+                val actionIntent = PendingIntent.getService(context, 1, intent, PendingIntent.FLAG_IMMUTABLE)
+                val action = NotificationCompat.Action.Builder(-1, "unpair", actionIntent).build()
+                builder.addAction(action)
+            } else {
+                intent.action = BLEGenericsPairAction
+                intent.putExtra("pin", "000000")
+                val actionIntent = PendingIntent.getService(context, 1, intent, PendingIntent.FLAG_IMMUTABLE)
+                val action = NotificationCompat.Action.Builder(-1, "pair", actionIntent).build()
                 builder.addAction(action)
             }
         }

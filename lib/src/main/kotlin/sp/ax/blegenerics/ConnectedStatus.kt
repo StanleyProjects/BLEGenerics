@@ -7,7 +7,7 @@ internal sealed interface ConnectedStatus : Comparable<ConnectedStatus> {
         override val ordinal = 4
     }
 
-    data object Idling : ConnectedStatus {
+    data class Idling(val isPaired: Boolean) : ConnectedStatus {
         override val ordinal = 8
     }
 
