@@ -46,9 +46,7 @@ class RealBLEGenerics(
     private suspend fun toConnected(gatt: BluetoothGatt) {
         when (_states.value) {
             is InternalState.Connecting -> onConnect(gatt = gatt)
-            else -> {
-                // todo
-            }
+            else -> { /* noop */ }
         }
     }
 
@@ -62,7 +60,9 @@ class RealBLEGenerics(
             }
             is InternalState.Connected -> {
                 when (state.status) {
-                    ConnectedStatus.Idling, is ConnectedStatus.Pairing -> {
+                    is ConnectedStatus.Idling,
+                    is ConnectedStatus.Pairing,
+                    -> {
                         _states.value = InternalState.Searching(address = address)
                     }
                     else -> {
@@ -239,8 +239,8 @@ class RealBLEGenerics(
         when (state) {
             is InternalState.Connected -> {
                 when (state.status) {
-                    ConnectedStatus.Idling -> {
-                        BLEGenerics.State.Connected(address = state.address, isPaired = state.isPaired)
+                    is ConnectedStatus.Idling -> {
+                        BLEGenerics.State.Connected(address = state.address, isPaired = state.status.isPaired)
                     }
                     is ConnectedStatus.Pairing -> {
                         BLEGenerics.State.Pairing(address = state.address)
@@ -315,7 +315,7 @@ class RealBLEGenerics(
                     _states.value = InternalState.Searching(address = state.address)
                 }
             }
-            is InternalState.Connecting, is InternalState.Connected -> {
+            is InternalState.Connected -> {
                 if (!managers.isReady()) {
                     _states.value = InternalState.Waiting(address = state.address)
                 }
@@ -423,28 +423,23 @@ class RealBLEGenerics(
                         _states.value = InternalState.Searching(address = state.address)
                         _events.emit(BLEGenerics.Event.OnPairing(address = state.address, isSuccess = false))
                     }
-                    else -> if (state.isPaired) {
+                    is ConnectedStatus.Idling -> if (state.status.isPaired) {
                         val reason = intent.getIntExtra("android.bluetooth.device.extra.REASON", BluetoothDevice.ERROR) // todo
                         logger.warning("device ${device.address} unpaired $reason externally")
                         _states.value = InternalState.Searching(address = state.address)
                     }
+                    else -> { /* noop */ }
                 }
             }
             BluetoothDevice.BOND_BONDED -> {
                 when (state.status) {
-                    ConnectedStatus.Idling -> if (!state.isPaired) {
+                    is ConnectedStatus.Idling -> if (!state.status.isPaired) {
                         logger.debug("device ${device.address} bonded externally")
-                        _states.value = state.copy(
-                            isPaired = true,
-                            status = ConnectedStatus.Idling,
-                        )
+                        _states.value = state.copy(status = ConnectedStatus.Idling(isPaired = true))
                     }
                     is ConnectedStatus.Pairing -> {
                         logger.debug("device ${device.address} bonded")
-                        _states.value = state.copy(
-                            isPaired = true,
-                            status = ConnectedStatus.Idling,
-                        )
+                        _states.value = state.copy(status = ConnectedStatus.Idling(isPaired = true))
                         _events.emit(BLEGenerics.Event.OnPairing(address = state.address, isSuccess = true))
                     }
                     else -> TODO("RealBLEGenerics:receivers:connected(${intent.action}):bonding($oldState:$newState):state: $state")
@@ -452,20 +447,11 @@ class RealBLEGenerics(
             }
             BluetoothDevice.BOND_BONDING -> {
                 when (state.status) {
-                    ConnectedStatus.Idling -> {
-                        if (state.isPaired) {
+                    is ConnectedStatus.Idling -> {
+                        if (state.status.isPaired) {
                             logger.debug("device ${device.address} is unpairing externally")
-                            _states.value = state.copy(
-                                isPaired = true,
-                                status = ConnectedStatus.Unpairing,
-                            )
                         } else {
                             logger.debug("device ${device.address} is pairing externally")
-                        }
-                        try {
-                            device.cancelBondProcess()
-                        } catch (error: Throwable) {
-                            logger.warning("cancel bonding ${device.address} error: $error")
                         }
                     }
                     is ConnectedStatus.Pairing -> {
@@ -508,8 +494,21 @@ class RealBLEGenerics(
                                 ?: TODO("RealBLEGenerics:onReceive($intent):no device!")
                             if (state.address != device.address) return
                             abortBroadcast()
-                            if (state.status !is ConnectedStatus.Pairing) {
+                            if (state.status is ConnectedStatus.Pairing) {
+                                logger.debug("manual pairing")
+                            } else {
                                 logger.debug("status ${state.status} so no manual pairing")
+                                runCatching {
+                                    device.cancelBondProcess()
+                                }.fold(
+                                    onSuccess = {
+                                        _states.value = InternalState.Searching(address = state.address)
+                                    },
+                                    onFailure = { error ->
+                                        logger.warning("cancel bonding ${device.address} error: $error ${error.cause}")
+                                        connecting(address = state.address)
+                                    },
+                                )
                                 return
                             }
                             val pin = state.status.pin ?: TODO("RealBLEGenerics:onReceive($intent):no pin!")
@@ -643,7 +642,7 @@ class RealBLEGenerics(
     private fun toString(state: InternalState?): String {
         return when (state) {
             is InternalState.Connected -> when (state.status) {
-                ConnectedStatus.Idling -> if (state.isPaired) {
+                is ConnectedStatus.Idling -> if (state.status.isPaired) {
                     "Paired"
                 } else {
                     "Unpaired"
@@ -723,8 +722,8 @@ class RealBLEGenerics(
                     } else if (oldState is InternalState.Connected && oldState.status is ConnectedStatus.Pairing) {
 //                        context.unregisterReceiver(receiversPairing) // todo
                     }
-                    if (oldState is InternalState.Connected && oldState.status == ConnectedStatus.Idling) {
-                        if (newState !is InternalState.Connected || newState.status != ConnectedStatus.Idling) {
+                    if (oldState is InternalState.Connected && oldState.status is ConnectedStatus.Idling) {
+                        if (newState !is InternalState.Connected || newState.status !is ConnectedStatus.Idling) {
                             _profiles.clear()
                         }
                     }
@@ -851,11 +850,11 @@ class RealBLEGenerics(
 
     private suspend fun onConnect(gatt: BluetoothGatt) {
         val address = gatt.device.address
+        val isPaired = gatt.device.bondState == BluetoothDevice.BOND_BONDED
         _states.value = InternalState.Connected(
             address = address,
-            isPaired = gatt.device.bondState == BluetoothDevice.BOND_BONDED,
             gatt = gatt,
-            status = ConnectedStatus.Idling,
+            status = ConnectedStatus.Idling(isPaired = isPaired),
         )
         _events.emit(BLEGenerics.Event.OnConnect(address = address))
     }
@@ -929,8 +928,7 @@ class RealBLEGenerics(
                     val state = _states.value
                     if (state !is InternalState.Connected) TODO("RealBLEGenerics:pair:state: $state")
                     if (state.status !is ConnectedStatus.Idling) TODO("RealBLEGenerics:pair:state: $state")
-                    val address = state.address
-                    if (state.isPaired) TODO("RealBLEGenerics:pair($address):already paired!")
+                    if (state.status.isPaired) TODO("RealBLEGenerics:pair(${state.address}):already paired!")
                     _states.value = state.copy(status = ConnectedStatus.Pairing(pin = pin))
                 }
             }
@@ -957,7 +955,7 @@ class RealBLEGenerics(
                     if (state !is InternalState.Connected) TODO("RealBLEGenerics:unpair:state: $state")
                     if (state.status !is ConnectedStatus.Idling) TODO("RealBLEGenerics:unpair:state: $state")
                     val address = state.address
-                    if (!state.isPaired) TODO("RealBLEGenerics:unpair($address):already unpaired!")
+                    if (!state.status.isPaired) TODO("RealBLEGenerics:unpair($address):already unpaired!")
                     _states.value = state.copy(status = ConnectedStatus.Unpairing)
                     try {
                         val bm = context.getSystemService(BluetoothManager::class.java)

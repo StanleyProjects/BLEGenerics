@@ -8,23 +8,21 @@ internal sealed interface InternalState : Comparable<InternalState?> {
 
     class Connected(
         override val address: String,
-        val isPaired: Boolean,
         val gatt: BluetoothGatt,
         val status: ConnectedStatus,
     ) : InternalState {
         override val ordinal = Ordinal
 
-        fun copy(isPaired: Boolean = this.isPaired, status: ConnectedStatus): Connected {
+        fun copy(status: ConnectedStatus): Connected {
             return Connected(
                 address = address,
-                isPaired = isPaired,
                 gatt = gatt,
                 status = status,
             )
         }
 
         override fun toString(): String {
-            return "Connected(address: $address, isPaired: $isPaired, gatt: ${gatt.hashCode()}, status: $status)"
+            return "Connected(address: $address, gatt: ${gatt.hashCode()}, status: $status)"
         }
 
         companion object : Comparable<InternalState?> {
