@@ -312,7 +312,7 @@ class RealBLEGenerics(
         when (val state = _states.value) {
             is InternalState.Waiting -> {
                 if (managers.isReady()) {
-                    _states.value = InternalState.Searching(address = state.address)
+                    connecting(address = state.address)
                 }
             }
             is InternalState.Connected -> {
@@ -325,9 +325,7 @@ class RealBLEGenerics(
                     _states.value = InternalState.Waiting(address = state.address)
                 }
             }
-            else -> {
-                // todo
-            }
+            else -> { /* noop */ }
         }
     }
 
@@ -691,7 +689,9 @@ class RealBLEGenerics(
             BluetoothDevice.BOND_NONE -> {
                 if (!device.createBond()) TODO("RealBLEGenerics:pair($address):create bond error!")
             }
-            BluetoothDevice.BOND_BONDING -> TODO("RealBLEGenerics:pair($address):bond state $bondState")
+            BluetoothDevice.BOND_BONDING -> {
+                logger.debug("already bonding")
+            }
             BluetoothDevice.BOND_BONDED -> TODO("RealBLEGenerics:pair($address):already bonded!")
             else -> TODO("RealBLEGenerics:pair($address):bond state $bondState is not supported!")
         }
