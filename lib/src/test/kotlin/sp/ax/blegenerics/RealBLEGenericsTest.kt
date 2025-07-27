@@ -617,7 +617,7 @@ internal class RealBLEGenericsTest {
                                 check(state is BLEGenerics.State.Connecting) { "$index] state: $state" }
                                 assertEquals(address, state.address)
                                 val device = bm.adapter.getRemoteDevice(address) ?: error("No device!")
-                                val gatt = Shadows.shadowOf(device).bluetoothGatts.single() ?: error("No gatt!")
+                                val gatt = Shadows.shadowOf(device).bluetoothGatts.lastOrNull() ?: error("No gatt!")
                                 val callback = Shadows.shadowOf(gatt).gattCallback ?: error("No callback!")
                                 callback.onConnectionStateChange(gatt, BluetoothGatt.GATT_SUCCESS, BluetoothGatt.STATE_CONNECTED)
                             }
@@ -634,7 +634,7 @@ internal class RealBLEGenericsTest {
                 job.join()
                 assertTrue("after connect", generics.states.value is BLEGenerics.State.Connected)
                 job = launch(CoroutineName("states")) {
-                    generics.states.take(3).collectIndexed { index, state ->
+                    generics.states.take(4).collectIndexed { index, state ->
                         when (index) {
                             0 -> {
                                 check(state is BLEGenerics.State.Connected) { "$index] state: $state" }
@@ -666,8 +666,17 @@ internal class RealBLEGenericsTest {
                                 context.sendBroadcast(broadcast)
                             }
                             2 -> {
-                                check(state is BLEGenerics.State.Searching) { "$index] state: $state" }
+                                check(state is BLEGenerics.State.Connecting) { "$index] state: $state" }
                                 assertEquals(address, state.address)
+                                val device = bm.adapter.getRemoteDevice(address) ?: error("No device!")
+                                val gatt = Shadows.shadowOf(device).bluetoothGatts.lastOrNull() ?: error("No gatt!")
+                                val callback = Shadows.shadowOf(gatt).gattCallback ?: error("No callback!")
+                                callback.onConnectionStateChange(gatt, BluetoothGatt.GATT_SUCCESS, BluetoothGatt.STATE_CONNECTED)
+                            }
+                            3 -> {
+                                check(state is BLEGenerics.State.Connected) { "$index] state: $state" }
+                                assertEquals(address, state.address)
+                                assertFalse(state.isPaired)
                             }
                             else -> error("Index $index is unexpected!")
                         }
