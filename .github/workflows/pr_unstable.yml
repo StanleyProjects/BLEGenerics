@@ -1,0 +1,35 @@
+on:
+  pull_request:
+    types: [opened, reopened]
+    branches: [unstable]
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - env:
+          KEYSTORE_PASSWORD: "${{secrets.KEYSTORE_PASSWORD}}"
+          MVN_PASSWORD: "${{secrets.MVN_PASSWORD}}"
+          GPG_PASSWORD: "${{secrets.GPG_PASSWORD}}"
+        run: |
+          docker run \
+          -e REPOSITORY_OWNER='${{github.event.repository.owner.login}}' \
+          -e REPOSITORY_NAME='${{github.event.repository.name}}' \
+          -e SOURCE_COMMIT='${{github.event.pull_request.head.sha}}' \
+          -e TARGET_BRANCH='${{github.event.pull_request.base.ref}}' \
+          -e TARGET_COMMIT='${{github.event.pull_request.base.sha}}' \
+          -e VCS_PAT='${{secrets.VCS_PAT}}' \
+          -e KEYSTORE='.mt/keystore.pkcs12' \
+          -e KEYSTORE_PASSWORD="${KEYSTORE_PASSWORD}" \
+          -e KEY_ALIAS='debug' \
+          -e TG_BOT_ID='${{secrets.TG_BOT_ID}}' \
+          -e TG_BOT_TOKEN='${{secrets.TG_BOT_TOKEN}}' \
+          -e TG_CHAT_ID='${{secrets.TG_CHAT_ID}}' \
+          -e MVN_SNAPSHOT_USER="${{secrets.MVN_USER}}" \
+          -e MVN_SNAPSHOT_PASSWORD="${MVN_PASSWORD}" \
+          -e GPG_KEY='.mt/key.gpg' \
+          -e GPG_PASSWORD="${GPG_PASSWORD}" \
+          -id --name container 'docker.io/kepocnhh/multitool-0.12.0-amd64:1200d'
+          docker exec container /usr/local/bin/bash -c 'echo "${{secrets.KEYSTORE}}" | base64 -d > ${KEYSTORE}'
+          docker exec container /usr/local/bin/bash -c 'echo "${{secrets.GPG_KEY}}" > "${GPG_KEY}"'
+          docker exec container /usr/local/bin/bash -c '$mt/android/lib/unstable/pr.sh'

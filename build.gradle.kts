@@ -1,7 +1,7 @@
-import sp.gx.core.asFile
-import sp.gx.core.buildDir
-import sp.gx.core.buildSrc
-import sp.gx.core.check
+import sp.kx.gradlex.asFile
+import sp.kx.gradlex.buildDir
+import sp.kx.gradlex.buildSrc
+import sp.kx.gradlex.check
 
 buildscript {
     repositories {
