@@ -20,6 +20,7 @@ internal class App : Application() {
             default = Dispatchers.Default,
             context = this,
             timeout = 3.seconds,
+            logger = FinalBLEScannerLogger(tag = "[BLEScanner]"),
         )
         _generics = RealBLEGenerics(
             coroutineScope = CoroutineScope(Dispatchers.Main + job),

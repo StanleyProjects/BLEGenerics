@@ -35,7 +35,10 @@ android {
         }
     }
 
-    buildFeatures.compose = true
+    buildFeatures {
+        buildConfig = true
+        compose = true
+    }
 
     composeOptions.kotlinCompilerExtensionVersion = "1.5.15"
 }
@@ -63,6 +66,6 @@ dependencies {
     implementation(project(":lib"))
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation(compose.foundation)
-    implementation("com.github.kepocnhh:BLEScanner:0.2.0u-SNAPSHOT")
-    implementation("com.github.kepocnhh:ComposeClicks:0.3.0u-SNAPSHOT")
+    implementation("com.github.kepocnhh:BLEScanner:0.3.1u-SNAPSHOT")
+    implementation("com.github.kepocnhh:Clicks:0.1.0u-SNAPSHOT")
 }
