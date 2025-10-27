@@ -1,5 +1,5 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
-import sp.gx.core.getByName
+import sp.kx.gradlex.camelCase
 
 repositories {
     google()
@@ -35,10 +35,7 @@ android {
         }
     }
 
-    buildFeatures {
-        compose = true
-        buildConfig = true
-    }
+    buildFeatures.compose = true
 
     composeOptions.kotlinCompilerExtensionVersion = "1.5.15"
 }
@@ -53,10 +50,10 @@ androidComponents.onVariants { variant ->
         android.defaultConfig.versionCode!!.toString(),
     ).joinToString(separator = "-", postfix = ".apk")
     afterEvaluate {
-        tasks.getByName<JavaCompile>("compile", variant.name, "JavaWithJavac") {
+        tasks.getByName<JavaCompile>(camelCase("compile", variant.name, "JavaWithJavac")) {
             targetCompatibility = Version.jvmTarget
         }
-        tasks.getByName<KotlinCompile>("compile", variant.name, "Kotlin") {
+        tasks.getByName<KotlinCompile>(camelCase("compile", variant.name, "Kotlin")) {
             kotlinOptions.jvmTarget = Version.jvmTarget
         }
     }
